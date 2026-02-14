@@ -1,0 +1,50 @@
+{
+  "file:///Users/benedictromp/webdev/webframez/webframez-react/dev/dist/src/components/Calendar.js": {
+    "id": "./dist/src/components/Calendar.js",
+    "chunks": [
+      "client0",
+      "chunks/client0-abe3720b8b74511dc052.js"
+    ],
+    "name": "*"
+  },
+  "file:///Users/benedictromp/webdev/webframez/webframez-react/dev/dist/src/components/LoginForm.js": {
+    "id": "./dist/src/components/LoginForm.js",
+    "chunks": [
+      "client1",
+      "chunks/client1-476d270217dae92b7081.js"
+    ],
+    "name": "*"
+  },
+  "file:///Users/benedictromp/webdev/webframez/webframez-react/dev/dist/src/components/LogoutButton.js": {
+    "id": "./dist/src/components/LogoutButton.js",
+    "chunks": [
+      "client2",
+      "chunks/client2-329abcd87b49912f58df.js"
+    ],
+    "name": "*"
+  },
+  "file:///Users/benedictromp/webdev/webframez/webframez-react/dev/dist/src/components/RegisterForm.js": {
+    "id": "./dist/src/components/RegisterForm.js",
+    "chunks": [
+      "client3",
+      "chunks/client3-a734c3448dda33b1516f.js"
+    ],
+    "name": "*"
+  },
+  "file:///Users/benedictromp/webdev/webframez/webframez-react/dist/navigation.cjs": {
+    "id": "../dist/navigation.cjs",
+    "chunks": [
+      "client4",
+      "chunks/client4-c7049a0f360b6be9fbf9.js"
+    ],
+    "name": "*"
+  },
+  "file:///Users/benedictromp/webdev/webframez/webframez-react/dist/navigation.js": {
+    "id": "../dist/navigation.js",
+    "chunks": [
+      "client5",
+      "chunks/client5-1ce2de2121260c52e0a2.js"
+    ],
+    "name": "*"
+  }
+}

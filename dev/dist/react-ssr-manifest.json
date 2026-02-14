@@ -1,0 +1,44 @@
+{
+  "moduleLoading": {
+    "prefix": "/react/assets/",
+    "crossOrigin": null
+  },
+  "moduleMap": {
+    "./dist/src/components/Calendar.js": {
+      "*": {
+        "specifier": "file:///Users/benedictromp/webdev/webframez/webframez-react/dev/dist/src/components/Calendar.js",
+        "name": "*"
+      }
+    },
+    "./dist/src/components/LoginForm.js": {
+      "*": {
+        "specifier": "file:///Users/benedictromp/webdev/webframez/webframez-react/dev/dist/src/components/LoginForm.js",
+        "name": "*"
+      }
+    },
+    "./dist/src/components/LogoutButton.js": {
+      "*": {
+        "specifier": "file:///Users/benedictromp/webdev/webframez/webframez-react/dev/dist/src/components/LogoutButton.js",
+        "name": "*"
+      }
+    },
+    "./dist/src/components/RegisterForm.js": {
+      "*": {
+        "specifier": "file:///Users/benedictromp/webdev/webframez/webframez-react/dev/dist/src/components/RegisterForm.js",
+        "name": "*"
+      }
+    },
+    "../dist/navigation.cjs": {
+      "*": {
+        "specifier": "file:///Users/benedictromp/webdev/webframez/webframez-react/dist/navigation.cjs",
+        "name": "*"
+      }
+    },
+    "../dist/navigation.js": {
+      "*": {
+        "specifier": "file:///Users/benedictromp/webdev/webframez/webframez-react/dist/navigation.js",
+        "name": "*"
+      }
+    }
+  }
+}

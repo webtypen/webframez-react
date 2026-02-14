@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "baseUrl": ".",
+    "paths": {
+      "webframez-react/types": ["../dist/types.d.ts"],
+      "webframez-react/router": ["../dist/router.d.ts"],
+      "webframez-react/client": ["../dist/client.d.ts"],
+      "webframez-react/navigation": ["../dist/navigation.d.ts"]
+    },
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": [
+    "src/server.ts",
+    "src/components/**/*.tsx",
+    "pages/**/*.tsx",
+    "src/types.d.ts"
+  ],
+  "exclude": ["src/client.tsx", "dist", "node_modules"]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "webframez-react-dev",
+  "private": true,
+  "scripts": {
+    "build:framework": "npm --prefix .. run build",
+    "build:core": "npm --prefix ../../webframez-core run build",
+    "clean": "rm -rf dist",
+    "build:client": "webpack --config webpack.client.cjs",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build": "npm run build:core && npm run build:framework && npm run clean && npm run build:server && npm run build:client",
+    "watch:core": "npm --prefix ../../webframez-core run build -- --watch --preserveWatchOutput",
+    "watch:framework": "npm --prefix .. run build:watch",
+    "watch:server": "tsc -p tsconfig.server.json --watch --preserveWatchOutput",
+    "watch:client": "webpack --config webpack.client.cjs --watch",
+    "serve:watch": "node --watch --conditions react-server start-server.cjs",
+    "dev:watch": "sh -c 'npm run watch:core & npm run watch:framework & npm run watch:server & npm run watch:client & npm run serve:watch & wait'",
+    "dev": "npm run build && npm run dev:watch"
+  },
+  "dependencies": {
+    "@webtypen/webframez-core": "file:../../webframez-core",
+    "react": "0.0.0-experimental-95ffd6cd-20260205",
+    "react-dom": "0.0.0-experimental-95ffd6cd-20260205",
+    "react-server-dom-webpack": "0.0.0-experimental-95ffd6cd-20260205",
+    "webframez-react": "file:.."
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.4.5",
+    "webpack": "^5.91.0",
+    "webpack-cli": "^5.1.4"
+  }
+}
