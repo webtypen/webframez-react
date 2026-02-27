@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createFromFetch } from "react-server-dom-webpack/client";
 import type { Root } from "react-dom/client";
+import type { ClientNavigationPayload, HeadConfig, HeadLinkTag, HeadMetaTag } from "./types";
 
 type ClientOptions = {
   rootId?: string;
@@ -41,6 +42,7 @@ const RouterContext: React.Context<RouterClient | null> | null =
     ? React.createContext<RouterClient | null>(null)
     : null;
 const GLOBAL_ROUTER_KEY = "__WEBFRAMEZ_ROUTER__";
+const MANAGED_HEAD_SELECTOR = "[data-webframez-head='true']";
 
 function readGlobalRouter() {
   if (typeof window === "undefined") {
@@ -168,6 +170,64 @@ function LoaderBar({ active }: { active: boolean }) {
   );
 }
 
+function appendManagedMetaTag(meta: HeadMetaTag) {
+  const element = document.createElement("meta");
+  element.setAttribute("data-webframez-head", "true");
+
+  const entries = Object.entries(meta).filter(([, value]) => Boolean(value));
+  for (const [key, value] of entries) {
+    element.setAttribute(key, String(value));
+  }
+
+  document.head.appendChild(element);
+}
+
+function appendManagedLinkTag(link: HeadLinkTag) {
+  const element = document.createElement("link");
+  element.setAttribute("data-webframez-head", "true");
+
+  const entries = Object.entries(link).filter(([, value]) => Boolean(value));
+  for (const [key, value] of entries) {
+    element.setAttribute(key, String(value));
+  }
+
+  document.head.appendChild(element);
+}
+
+function applyHead(head: HeadConfig) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.title = head.title || "Webframez React";
+
+  for (const managedNode of document.head.querySelectorAll(MANAGED_HEAD_SELECTOR)) {
+    managedNode.remove();
+  }
+
+  if (head.description) {
+    appendManagedMetaTag({
+      name: "description",
+      content: head.description,
+    });
+  }
+
+  if (head.favicon) {
+    appendManagedLinkTag({
+      rel: "icon",
+      href: head.favicon,
+    });
+  }
+
+  for (const meta of head.meta ?? []) {
+    appendManagedMetaTag(meta);
+  }
+
+  for (const link of head.links ?? []) {
+    appendManagedLinkTag(link);
+  }
+}
+
 function createApp(rscEndpoint: string) {
   return function App() {
     const [tree, setTree] = useState<React.ReactNode>(null);
@@ -188,8 +248,9 @@ function createApp(rscEndpoint: string) {
           )
         );
 
-        const nextTree = await (response as Promise<React.ReactNode>);
-        setTree(nextTree);
+        const nextPayload = await (response as Promise<ClientNavigationPayload>);
+        applyHead(nextPayload.head);
+        setTree(nextPayload.model);
 
         const nextHref = `${url.pathname}${url.search}`;
         if (mode === "replace") {

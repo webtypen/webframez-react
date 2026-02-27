@@ -144,6 +144,10 @@ function readSearchParams(urlSearchParams) {
 function escapeHtml(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;");
 }
+var MANAGED_HEAD_ATTR = "data-webframez-head";
+function createManagedAttributes() {
+  return `${MANAGED_HEAD_ATTR}="true"`;
+}
 function toRouteEntry(pagesDir, filePath) {
   const normalized = filePath.replace(/\\/g, "/");
   if (!normalized.endsWith("/index.js")) {
@@ -212,19 +216,21 @@ function renderHeadToString(head) {
   const tags = [];
   if (head.description) {
     tags.push(
-      `<meta name="description" content="${escapeHtml(head.description)}" />`
+      `<meta ${createManagedAttributes()} name="description" content="${escapeHtml(head.description)}" />`
     );
   }
   if (head.favicon) {
-    tags.push(`<link rel="icon" href="${escapeHtml(head.favicon)}" />`);
+    tags.push(
+      `<link ${createManagedAttributes()} rel="icon" href="${escapeHtml(head.favicon)}" />`
+    );
   }
   for (const meta of head.meta ?? []) {
     const attrs = Object.entries(meta).filter(([, value]) => Boolean(value)).map(([key, value]) => `${key}="${escapeHtml(String(value))}"`).join(" ");
-    tags.push(`<meta ${attrs} />`);
+    tags.push(`<meta ${createManagedAttributes()} ${attrs} />`);
   }
   for (const link of head.links ?? []) {
     const attrs = Object.entries(link).filter(([, value]) => Boolean(value)).map(([key, value]) => `${key}="${escapeHtml(String(value))}"`).join(" ");
-    tags.push(`<link ${attrs} />`);
+    tags.push(`<link ${createManagedAttributes()} ${attrs} />`);
   }
   return tags.join("\n");
 }
@@ -237,6 +243,12 @@ async function resolveHead(candidate, context) {
     return void 0;
   }
   return candidate.Head(context);
+}
+async function resolvePageData(candidate, context) {
+  if (!candidate.Data) {
+    return void 0;
+  }
+  return candidate.Data(context);
 }
 function findBestMatch(entries, pathname) {
   const matches = [];
@@ -317,10 +329,11 @@ function createFileRouter(options) {
       };
     }
     const errorModule = resolveModule(errorPath);
-    const errorNode = errorModule.default(errorProps);
+    const errorNode = await errorModule.default(errorProps);
     const layoutHead = layoutModule ? await resolveHead(layoutModule, context) : void 0;
     const errorHead = await resolveHead(errorModule, errorProps);
-    const model = layoutModule ? injectRouteChildren(layoutModule.default(context), errorNode) : errorNode;
+    const layoutNode = layoutModule ? await layoutModule.default(context) : null;
+    const model = layoutNode ? injectRouteChildren(layoutNode, errorNode) : errorNode;
     return {
       statusCode,
       model,
@@ -352,10 +365,17 @@ function createFileRouter(options) {
       activeContext = context;
       const pageModule = resolveModule(match.entry.filePath);
       const layoutModule = import_node_fs.default.existsSync(layoutPath) ? resolveModule(layoutPath) : null;
-      const pageNode = pageModule.default(context);
-      const layoutHead = layoutModule ? await resolveHead(layoutModule, context) : void 0;
-      const pageHead = await resolveHead(pageModule, context);
-      const model = layoutModule ? injectRouteChildren(layoutModule.default(context), pageNode) : pageNode;
+      const pageData = await resolvePageData(pageModule, context);
+      const pageContext = {
+        ...context,
+        data: pageData
+      };
+      activeContext = pageContext;
+      const pageNode = await pageModule.default(pageContext);
+      const layoutHead = layoutModule ? await resolveHead(layoutModule, pageContext) : void 0;
+      const pageHead = await resolveHead(pageModule, pageContext);
+      const layoutNode = layoutModule ? await layoutModule.default(pageContext) : null;
+      const model = layoutNode ? injectRouteChildren(layoutNode, pageNode) : pageNode;
       return {
         statusCode: 200,
         model,

@@ -4,17 +4,29 @@ import { execFile } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createHTMLShell, sendRSC } from "./server";
 import { createFileRouter, parseSearchParams, renderHeadToString } from "./router";
+import type { ClientNavigationPayload } from "./types";
 
-export type CreateNodeHandlerOptions = {
+export type WebframezReactRoutePath = `/${string}` | "/";
+export type WebframezReactAssetsPrefix = `${WebframezReactRoutePath}/` | "/";
+
+export interface CreateNodeHandlerPathsOptions {
   distRootDir: string;
   pagesDir?: string;
   manifestPath?: string;
-  assetsPrefix?: string;
-  rscPath?: string;
-  clientScriptUrl?: string;
-  basePath?: string;
-  liveReloadPath?: string | false;
-};
+}
+
+export interface CreateNodeHandlerRoutingOptions {
+  assetsPrefix?: WebframezReactAssetsPrefix;
+  rscPath?: WebframezReactRoutePath;
+  clientScriptUrl?: WebframezReactRoutePath;
+  basePath?: WebframezReactRoutePath;
+  liveReloadPath?: WebframezReactRoutePath | false;
+}
+
+export interface CreateNodeHandlerOptions
+  extends CreateNodeHandlerPathsOptions,
+    CreateNodeHandlerRoutingOptions {
+}
 
 function normalizeBasePath(basePath?: string) {
   if (!basePath || basePath === "/") {
@@ -245,7 +257,11 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         })
       );
 
-      sendRSC(res, resolved.model, {
+      const payload: ClientNavigationPayload = {
+        model: resolved.model,
+        head: resolved.head,
+      };
+      sendRSC(res, payload, {
         moduleMap,
         statusCode: resolved.statusCode,
       });

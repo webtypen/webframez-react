@@ -16,7 +16,7 @@ class Kernel extends BaseKernelWeb {
 }
 
 const port = 3000;
-initWebframezReact(Route);
+const ReactRoute = initWebframezReact(Route);
 
 const app = new WebApplication();
 app.boot({
@@ -31,7 +31,7 @@ app.boot({
       });
     });
 
-    Route.renderReact("/react", {
+    ReactRoute.renderReact("/react", {
       distRootDir,
     });
   },

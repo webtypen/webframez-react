@@ -1,5 +1,4 @@
 "use server";
-
 import React from "react";
 import type { HeadConfig, PageProps } from "webframez-react/types";
 
@@ -15,7 +14,7 @@ export default function AccountPage({
   searchParams,
   abort,
 }: PageProps) {
-  if (params.username !== "jane123") {
+  if (params.username !== "jane") {
     abort({
       status: 404,
       message: `Account "${params.username}" not found`,

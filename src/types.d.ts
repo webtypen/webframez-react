@@ -9,17 +9,24 @@ export type AbortRouteOptions = {
   payload?: unknown;
 };
 
-export type RouteContext = {
+export type RouteContext<TData = unknown> = {
   pathname: string;
   params: RouteParams;
   searchParams: RouteSearchParams;
   cookies: Record<string, string>;
+  data?: TData;
   abort: (options?: AbortRouteOptions) => never;
 };
 
-export type PageProps = RouteContext;
+export type InferPageData<TDataResolver> =
+  TDataResolver extends (...args: any[]) => any
+    ? Awaited<ReturnType<TDataResolver>>
+    : TDataResolver;
+export type PageProps<TData = unknown> = RouteContext<InferPageData<TData>>;
+export type PagePropsFromData<TDataResolver extends (...args: any[]) => any> =
+  PageProps<InferPageData<TDataResolver>>;
 
-export type ErrorPageProps = RouteContext & {
+export type ErrorPageProps<TData = unknown> = RouteContext<TData> & {
   statusCode: number;
   message: string;
   payload?: unknown;
@@ -49,22 +56,32 @@ export type HeadConfig = {
   links?: HeadLinkTag[];
 };
 
+export type ClientNavigationPayload = {
+  model: ReactNode;
+  head: HeadConfig;
+};
+
 export type HeadResolver<TContext = RouteContext> = (
   context: TContext
 ) => HeadConfig | Promise<HeadConfig>;
 
-export type PageModule = {
-  default: (props: PageProps) => ReactNode;
-  Head?: HeadResolver<RouteContext>;
+export type PageDataResolver<TData = unknown> = (
+  context: RouteContext
+) => TData | Promise<TData>;
+
+export type PageModule<TData = unknown> = {
+  default: (props: PageProps<TData>) => ReactNode | Promise<ReactNode>;
+  Head?: HeadResolver<PageProps<TData>>;
+  Data?: PageDataResolver<TData>;
 };
 
 export type LayoutModule = {
-  default: (props: RouteContext) => ReactNode;
+  default: (props: RouteContext) => ReactNode | Promise<ReactNode>;
   Head?: HeadResolver<RouteContext>;
 };
 
 export type ErrorModule = {
-  default: (props: ErrorPageProps) => ReactNode;
+  default: (props: ErrorPageProps) => ReactNode | Promise<ReactNode>;
   Head?: HeadResolver<ErrorPageProps>;
 };
 

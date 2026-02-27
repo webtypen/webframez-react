@@ -11,7 +11,7 @@
     "id": "./dist/src/components/LoginForm.js",
     "chunks": [
       "client1",
-      "chunks/client1-476d270217dae92b7081.js"
+      "chunks/client1-7418d76cb92614831eb4.js"
     ],
     "name": "*"
   },
@@ -19,7 +19,7 @@
     "id": "./dist/src/components/LogoutButton.js",
     "chunks": [
       "client2",
-      "chunks/client2-329abcd87b49912f58df.js"
+      "chunks/client2-0f15d38647c2388fcdc0.js"
     ],
     "name": "*"
   },

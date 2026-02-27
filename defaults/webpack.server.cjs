@@ -1,11 +1,18 @@
 const path = require("path");
+const fs = require("fs");
 
 const projectRoot = process.cwd();
+const defaultServerEntry = fs.existsSync(path.resolve(projectRoot, "src/server.ts"))
+  ? path.resolve(projectRoot, "src/server.ts")
+  : path.resolve(projectRoot, "src/server.tsx");
+const serverEntry = process.env.WEBFRAMEZ_REACT_SERVER_ENTRY
+  ? path.resolve(projectRoot, process.env.WEBFRAMEZ_REACT_SERVER_ENTRY)
+  : defaultServerEntry;
 
 module.exports = {
   mode: process.env.NODE_ENV === "production" ? "production" : "development",
   target: "node",
-  entry: path.resolve(projectRoot, "src/server.ts"),
+  entry: serverEntry,
   output: {
     path: path.resolve(projectRoot, "dist"),
     filename: "server.cjs",

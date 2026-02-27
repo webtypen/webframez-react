@@ -99,12 +99,31 @@ type CoreRouteFacade = {
   ) => void;
 };
 
-export type WebframezCoreRouteMethod = "GET" | "POST" | "PUT" | "DELETE";
+export interface WebframezCoreRouteFacadeExtensions {
+  renderReact(
+    path: string,
+    options: WebframezCoreReactRenderRouteOptions,
+  ): void;
+  reactRender(
+    path: string,
+    options: WebframezCoreReactRenderRouteOptions,
+  ): void;
+}
 
-export type WebframezCoreReactRenderRouteOptions = CreateNodeHandlerOptions & {
+export type WebframezCoreRouteMethod = "GET" | "POST" | "PUT" | "DELETE";
+export type WebframezCoreRouteMiddleware = string | string[];
+
+export interface WebframezCoreRouteRegistrationOptions {
+  middleware?: WebframezCoreRouteMiddleware;
+  domains?: string | string[];
+  [key: string]: unknown;
+}
+
+export interface WebframezCoreReactRenderRouteOptions
+  extends CreateNodeHandlerOptions {
   method?: WebframezCoreRouteMethod | WebframezCoreRouteMethod[];
-  routeOptions?: Record<string, any>;
-};
+  routeOptions?: WebframezCoreRouteRegistrationOptions;
+}
 
 function normalizeMethods(
   method: WebframezCoreRouteMethod | WebframezCoreRouteMethod[] | undefined,
@@ -121,7 +140,7 @@ function registerByMethod(
   method: WebframezCoreRouteMethod,
   path: string,
   component: any,
-  routeOptions?: Record<string, any>,
+  routeOptions?: WebframezCoreRouteRegistrationOptions,
 ) {
   if (method === "GET") {
     route.get(path, component, routeOptions);
@@ -194,7 +213,9 @@ function registerRouteRenderer(
   });
 }
 
-export function initWebframezReact(route: CoreRouteFacade): CoreRouteFacade {
+export function initWebframezReact<T extends CoreRouteFacade>(
+  route: T,
+): T & WebframezCoreRouteFacadeExtensions {
   if (!route || typeof route.extend !== "function") {
     throw new Error(
       "initWebframezReact requires a webframez-core Route facade",
@@ -210,7 +231,7 @@ export function initWebframezReact(route: CoreRouteFacade): CoreRouteFacade {
     registerRouteRenderer(route, "reactRender");
   }
 
-  return route;
+  return route as T & WebframezCoreRouteFacadeExtensions;
 }
 
 export const setupWebframezCoreReactRoute = initWebframezReact;

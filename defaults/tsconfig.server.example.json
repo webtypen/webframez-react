@@ -22,24 +22,6 @@
       ],
       "@webtypen/webframez-react/webframez-core": [
         "./node_modules/@webtypen/webframez-react/dist/webframez-core.d.ts"
-      ],
-      "webframez-react": [
-        "./node_modules/@webtypen/webframez-react/dist/index.d.ts"
-      ],
-      "webframez-react/types": [
-        "./node_modules/@webtypen/webframez-react/dist/types.d.ts"
-      ],
-      "webframez-react/router": [
-        "./node_modules/@webtypen/webframez-react/dist/router.d.ts"
-      ],
-      "webframez-react/client": [
-        "./node_modules/@webtypen/webframez-react/dist/client.d.ts"
-      ],
-      "webframez-react/navigation": [
-        "./node_modules/@webtypen/webframez-react/dist/navigation.d.ts"
-      ],
-      "webframez-react/webframez-core": [
-        "./node_modules/@webtypen/webframez-react/dist/webframez-core.d.ts"
       ]
     },
     "jsx": "react-jsx",

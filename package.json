@@ -1,6 +1,6 @@
 {
   "name": "@webtypen/webframez-react",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "TypeScript React RSC addition for @webtypen/webframez-core",
   "homepage": "https://webtypen.de/",
   "author": {
@@ -61,6 +61,7 @@
     "./defaults/webpack.client": "./defaults/webpack.client.cjs",
     "./defaults/webpack.server": "./defaults/webpack.server.cjs",
     "./defaults/tsconfig.server": "./defaults/tsconfig.server.json",
+    "./defaults/tsconfig.server.example": "./defaults/tsconfig.server.example.json",
     "./cli": "./bin/webframez-react.mjs"
   },
   "files": [

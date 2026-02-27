@@ -8,6 +8,8 @@ import type {
   ErrorPageProps,
   HeadConfig,
   LayoutModule,
+  PageDataResolver,
+  PageProps,
   PageModule,
   RouteContext,
   RouteParams,
@@ -100,6 +102,12 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
+const MANAGED_HEAD_ATTR = "data-webframez-head";
+
+function createManagedAttributes() {
+  return `${MANAGED_HEAD_ATTR}="true"`;
+}
+
 function toRouteEntry(pagesDir: string, filePath: string): RouteEntry | null {
   const normalized = filePath.replace(/\\/g, "/");
   if (!normalized.endsWith("/index.js")) {
@@ -184,12 +192,14 @@ export function renderHeadToString(head: HeadConfig) {
 
   if (head.description) {
     tags.push(
-      `<meta name=\"description\" content=\"${escapeHtml(head.description)}\" />`
+      `<meta ${createManagedAttributes()} name=\"description\" content=\"${escapeHtml(head.description)}\" />`
     );
   }
 
   if (head.favicon) {
-    tags.push(`<link rel=\"icon\" href=\"${escapeHtml(head.favicon)}\" />`);
+    tags.push(
+      `<link ${createManagedAttributes()} rel=\"icon\" href=\"${escapeHtml(head.favicon)}\" />`
+    );
   }
 
   for (const meta of head.meta ?? []) {
@@ -197,7 +207,7 @@ export function renderHeadToString(head: HeadConfig) {
       .filter(([, value]) => Boolean(value))
       .map(([key, value]) => `${key}=\"${escapeHtml(String(value))}\"`)
       .join(" ");
-    tags.push(`<meta ${attrs} />`);
+    tags.push(`<meta ${createManagedAttributes()} ${attrs} />`);
   }
 
   for (const link of head.links ?? []) {
@@ -205,7 +215,7 @@ export function renderHeadToString(head: HeadConfig) {
       .filter(([, value]) => Boolean(value))
       .map(([key, value]) => `${key}=\"${escapeHtml(String(value))}\"`)
       .join(" ");
-    tags.push(`<link ${attrs} />`);
+    tags.push(`<link ${createManagedAttributes()} ${attrs} />`);
   }
 
   return tags.join("\n");
@@ -225,6 +235,17 @@ async function resolveHead<TContext extends RouteContext | ErrorPageProps>(
   }
 
   return candidate.Head(context);
+}
+
+async function resolvePageData<TData>(
+  candidate: { Data?: PageDataResolver<TData> },
+  context: RouteContext
+) {
+  if (!candidate.Data) {
+    return undefined;
+  }
+
+  return candidate.Data(context);
 }
 
 function findBestMatch(entries: RouteEntry[], pathname: string) {
@@ -334,15 +355,18 @@ export function createFileRouter(options: { pagesDir: string }) {
     }
 
     const errorModule = resolveModule<ErrorModule>(errorPath);
-    const errorNode = errorModule.default(errorProps);
+    const errorNode = await errorModule.default(errorProps);
 
     const layoutHead = layoutModule
       ? await resolveHead(layoutModule, context)
       : undefined;
     const errorHead = await resolveHead(errorModule, errorProps);
 
-    const model = layoutModule
-      ? injectRouteChildren(layoutModule.default(context), errorNode)
+    const layoutNode = layoutModule
+      ? await layoutModule.default(context)
+      : null;
+    const model = layoutNode
+      ? injectRouteChildren(layoutNode, errorNode)
       : errorNode;
 
     return {
@@ -384,14 +408,24 @@ export function createFileRouter(options: { pagesDir: string }) {
         ? resolveModule<LayoutModule>(layoutPath)
         : null;
 
-      const pageNode = pageModule.default(context);
-      const layoutHead = layoutModule
-        ? await resolveHead(layoutModule, context)
-        : undefined;
-      const pageHead = await resolveHead(pageModule, context);
+      const pageData = await resolvePageData(pageModule, context);
+      const pageContext: PageProps = {
+        ...context,
+        data: pageData,
+      };
+      activeContext = pageContext;
 
-      const model = layoutModule
-        ? injectRouteChildren(layoutModule.default(context), pageNode)
+      const pageNode = await pageModule.default(pageContext);
+      const layoutHead = layoutModule
+        ? await resolveHead(layoutModule, pageContext)
+        : undefined;
+      const pageHead = await resolveHead(pageModule, pageContext);
+
+      const layoutNode = layoutModule
+        ? await layoutModule.default(pageContext)
+        : null;
+      const model = layoutNode
+        ? injectRouteChildren(layoutNode, pageNode)
         : pageNode;
 
       return {

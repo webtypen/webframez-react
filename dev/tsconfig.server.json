@@ -5,10 +5,18 @@
     "moduleResolution": "Node",
     "baseUrl": ".",
     "paths": {
+      "@webtypen/webframez-react": ["../dist/index.d.ts"],
+      "@webtypen/webframez-react/types": ["../dist/types.d.ts"],
+      "@webtypen/webframez-react/router": ["../dist/router.d.ts"],
+      "@webtypen/webframez-react/client": ["../dist/client.d.ts"],
+      "@webtypen/webframez-react/navigation": ["../dist/navigation.d.ts"],
+      "@webtypen/webframez-react/webframez-core": ["../dist/webframez-core.d.ts"],
+      "webframez-react": ["../dist/index.d.ts"],
       "webframez-react/types": ["../dist/types.d.ts"],
       "webframez-react/router": ["../dist/router.d.ts"],
       "webframez-react/client": ["../dist/client.d.ts"],
-      "webframez-react/navigation": ["../dist/navigation.d.ts"]
+      "webframez-react/navigation": ["../dist/navigation.d.ts"],
+      "webframez-react/webframez-core": ["../dist/webframez-core.d.ts"]
     },
     "jsx": "react-jsx",
     "strict": true,

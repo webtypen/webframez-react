@@ -12,7 +12,7 @@ class Kernel extends webframez_core_1.BaseKernelWeb {
 Kernel.controller = {};
 Kernel.middleware = {};
 const port = 3000;
-(0, webframez_react_1.initWebframezReact)(webframez_core_1.Route);
+const ReactRoute = (0, webframez_react_1.initWebframezReact)(webframez_core_1.Route);
 const app = new webframez_core_1.WebApplication();
 app.boot({
     kernel: Kernel,
@@ -25,7 +25,7 @@ app.boot({
                 renderer: "react",
             });
         });
-        webframez_core_1.Route.renderReact("/react", {
+        ReactRoute.renderReact("/react", {
             distRootDir,
         });
     },

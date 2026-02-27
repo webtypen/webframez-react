@@ -1,15 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CreateHtmlShellOptions, SendRSCOptions } from "./types";
 import type { CreateNodeHandlerOptions } from "./http";
+import "./webframez-core";
 
 export * from "./types";
 export { createFileRouter, parseSearchParams, renderHeadToString, RouteChildren } from "./router";
 export type { ResolvedRoute } from "./router";
-export { initWebframezReact, setupWebframezCoreReactRoute } from "./webframez-core";
-export type {
-  WebframezCoreRouteMethod,
-  WebframezCoreReactRenderRouteOptions,
-} from "./webframez-core";
+export * from "./webframez-core";
 
 export function createHTMLShell(options?: CreateHtmlShellOptions): string;
 export function sendRSC(
