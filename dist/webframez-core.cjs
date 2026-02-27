@@ -496,8 +496,23 @@ async function renderInitialHtmlInWorker(options) {
   const payload = Buffer.from(JSON.stringify(options), "utf8").toString("base64url");
   const script = `
 const path = require("node:path");
+const Module = require("node:module");
 const input = JSON.parse(Buffer.from(process.argv[1], "base64url").toString("utf8"));
 globalThis.__RSC_BASENAME = input.basename || "";
+const appRequire = Module.createRequire(path.join(input.pagesDir, "__webframez_react_worker__.js"));
+const originalResolveFilename = Module._resolveFilename;
+const forcedResolutions = new Map([
+  ["react", appRequire.resolve("react")],
+  ["react/jsx-runtime", appRequire.resolve("react/jsx-runtime")],
+  ["react/jsx-dev-runtime", appRequire.resolve("react/jsx-dev-runtime")],
+  ["react-dom/client", appRequire.resolve("react-dom/client")]
+]);
+Module._resolveFilename = function(request, parent, isMain, options) {
+  if (forcedResolutions.has(request)) {
+    return forcedResolutions.get(request);
+  }
+  return originalResolveFilename.call(this, request, parent, isMain, options);
+};
 const { createFileRouter } = require("webframez-react/router");
 const reactDomPkg = require.resolve("react-dom/package.json", {
   paths: [process.cwd(), input.pagesDir]

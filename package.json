@@ -19,6 +19,9 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "webframez-react": "./bin/webframez-react.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -54,10 +57,16 @@
       "types": "./dist/webframez-core.d.ts",
       "import": "./dist/webframez-core.js",
       "require": "./dist/webframez-core.cjs"
-    }
+    },
+    "./defaults/webpack.client": "./defaults/webpack.client.cjs",
+    "./defaults/webpack.server": "./defaults/webpack.server.cjs",
+    "./defaults/tsconfig.server": "./defaults/tsconfig.server.json",
+    "./cli": "./bin/webframez-react.mjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "defaults",
+    "bin"
   ],
   "scripts": {
     "clean": "rm -rf dist",

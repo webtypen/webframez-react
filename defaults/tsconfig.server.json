@@ -1,0 +1,51 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "baseUrl": ".",
+    "paths": {
+      "@webtypen/webframez-react/types": [
+        "./node_modules/@webtypen/webframez-react/dist/types.d.ts"
+      ],
+      "@webtypen/webframez-react/router": [
+        "./node_modules/@webtypen/webframez-react/dist/router.d.ts"
+      ],
+      "@webtypen/webframez-react/client": [
+        "./node_modules/@webtypen/webframez-react/dist/client.d.ts"
+      ],
+      "@webtypen/webframez-react/navigation": [
+        "./node_modules/@webtypen/webframez-react/dist/navigation.d.ts"
+      ],
+      "webframez-react/types": [
+        "./node_modules/@webtypen/webframez-react/dist/types.d.ts"
+      ],
+      "webframez-react/router": [
+        "./node_modules/@webtypen/webframez-react/dist/router.d.ts"
+      ],
+      "webframez-react/client": [
+        "./node_modules/@webtypen/webframez-react/dist/client.d.ts"
+      ],
+      "webframez-react/navigation": [
+        "./node_modules/@webtypen/webframez-react/dist/navigation.d.ts"
+      ]
+    },
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": [
+    "src/server.ts",
+    "src/components/**/*.tsx",
+    "pages/**/*.tsx",
+    "src/types.d.ts"
+  ],
+  "exclude": [
+    "src/client.tsx",
+    "dist",
+    "node_modules"
+  ]
+}
