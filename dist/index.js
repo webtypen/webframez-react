@@ -870,4 +870,3 @@ export {
   sendRSC,
   setupWebframezCoreReactRoute
 };
-//# sourceMappingURL=index.js.map

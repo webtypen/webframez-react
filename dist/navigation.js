@@ -123,4 +123,3 @@ export {
   Link,
   Redirect
 };
-//# sourceMappingURL=navigation.js.map

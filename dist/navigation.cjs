@@ -147,4 +147,3 @@ function Redirect({ to, basename, replace = true }) {
   Link,
   Redirect
 });
-//# sourceMappingURL=navigation.cjs.map

@@ -353,4 +353,3 @@ export {
   parseSearchParams,
   renderHeadToString
 };
-//# sourceMappingURL=router.js.map

@@ -907,4 +907,3 @@ var setupWebframezCoreReactRoute = initWebframezReact;
   sendRSC,
   setupWebframezCoreReactRoute
 });
-//# sourceMappingURL=index.cjs.map

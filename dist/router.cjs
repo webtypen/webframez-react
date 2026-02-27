@@ -384,4 +384,3 @@ function parseSearchParams(query) {
   parseSearchParams,
   renderHeadToString
 });
-//# sourceMappingURL=router.cjs.map

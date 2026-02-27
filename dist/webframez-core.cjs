@@ -865,4 +865,3 @@ var setupWebframezCoreReactRoute = initWebframezReact;
   initWebframezReact,
   setupWebframezCoreReactRoute
 });
-//# sourceMappingURL=webframez-core.cjs.map
