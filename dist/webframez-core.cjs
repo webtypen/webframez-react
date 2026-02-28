@@ -481,6 +481,68 @@ function parseSearchParams(query) {
 }
 
 // src/http.ts
+var INITIAL_HTML_WORKER_SCRIPT = `
+const path = require("node:path");
+const Module = require("node:module");
+
+const pagesDir = process.env.WEBFRAMEZ_REACT_PAGES_DIR || "";
+if (!pagesDir) {
+  throw new Error("Missing WEBFRAMEZ_REACT_PAGES_DIR");
+}
+
+const appRequire = Module.createRequire(path.join(pagesDir, "__webframez_react_worker__.js"));
+const originalResolveFilename = Module._resolveFilename;
+const forcedResolutions = new Map([
+  ["react", appRequire.resolve("react")],
+  ["react/jsx-runtime", appRequire.resolve("react/jsx-runtime")],
+  ["react/jsx-dev-runtime", appRequire.resolve("react/jsx-dev-runtime")],
+  ["react-dom/client", appRequire.resolve("react-dom/client")]
+]);
+
+Module._resolveFilename = function(request, parent, isMain, options) {
+  if (forcedResolutions.has(request)) {
+    return forcedResolutions.get(request);
+  }
+  return originalResolveFilename.call(this, request, parent, isMain, options);
+};
+
+const { createFileRouter } = require("@webtypen/webframez-react/router");
+const reactDomPkg = require.resolve("react-dom/package.json", {
+  paths: [process.cwd(), pagesDir]
+});
+const reactDomServer = require(path.join(path.dirname(reactDomPkg), "server.node.js"));
+const router = createFileRouter({ pagesDir });
+
+process.on("message", async (message) => {
+  if (!message || message.type !== "render") {
+    return;
+  }
+
+  const previousBasename = globalThis.__RSC_BASENAME;
+  globalThis.__RSC_BASENAME = message.payload.basename || "";
+
+  try {
+    const resolved = await router.resolve({
+      pathname: message.payload.pathname,
+      searchParams: message.payload.searchParams || {},
+      cookies: message.payload.cookies || {},
+    });
+    const html = reactDomServer.renderToString(resolved.model);
+    if (typeof process.send === "function") {
+      process.send({ id: message.id, ok: true, html });
+    }
+  } catch (error) {
+    const formatted = error && (error.stack || String(error))
+      ? (error.stack || String(error))
+      : "Unknown SSR worker error";
+    if (typeof process.send === "function") {
+      process.send({ id: message.id, ok: false, error: formatted });
+    }
+  } finally {
+    globalThis.__RSC_BASENAME = previousBasename;
+  }
+});
+`;
 function normalizeBasePath(basePath) {
   if (!basePath || basePath === "/") {
     return "";
@@ -500,74 +562,110 @@ function stripBasePath(pathname, basePath) {
   }
   return pathname;
 }
-function runNodeCommand(args) {
-  return new Promise((resolve, reject) => {
-    const execArgs = [
-      "--conditions",
-      "react-server",
-      "-r",
-      "@webtypen/webframez-react/register",
-      ...args
-    ];
-    (0, import_node_child_process.execFile)(
-      process.execPath,
-      execArgs,
-      { timeout: 1e4, maxBuffer: 1024 * 1024 * 5 },
-      (error, stdout, stderr) => {
-        if (error) {
-          const out = stderr && stderr.trim() !== "" ? stderr : stdout;
-          reject(new Error(out || error.message));
-          return;
-        }
-        resolve({ stdout, stderr });
+function createInitialHtmlWorker(pagesDir) {
+  let child = null;
+  let nextRequestId = 1;
+  let stderrBuffer = "";
+  const pending = /* @__PURE__ */ new Map();
+  const rejectPending = (error) => {
+    for (const entry of pending.values()) {
+      clearTimeout(entry.timeout);
+      entry.reject(error);
+    }
+    pending.clear();
+  };
+  const stopWorker = () => {
+    if (!child) {
+      return;
+    }
+    child.removeAllListeners();
+    if (!child.killed) {
+      child.kill();
+    }
+    child = null;
+  };
+  const startWorker = () => {
+    if (child && child.connected && !child.killed) {
+      return child;
+    }
+    stderrBuffer = "";
+    child = (0, import_node_child_process.spawn)(process.execPath, ["-e", INITIAL_HTML_WORKER_SCRIPT], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        WEBFRAMEZ_REACT_PAGES_DIR: pagesDir
+      },
+      stdio: ["ignore", "ignore", "pipe", "ipc"]
+    });
+    child.on("message", (message) => {
+      if (!message || typeof message.id !== "number") {
+        return;
       }
-    );
-  });
-}
-async function renderInitialHtmlInWorker(options) {
-  const payload = Buffer.from(JSON.stringify(options), "utf8").toString("base64url");
-  const script = `
-const path = require("node:path");
-const Module = require("node:module");
-const input = JSON.parse(Buffer.from(process.argv[1], "base64url").toString("utf8"));
-globalThis.__RSC_BASENAME = input.basename || "";
-const appRequire = Module.createRequire(path.join(input.pagesDir, "__webframez_react_worker__.js"));
-const originalResolveFilename = Module._resolveFilename;
-const forcedResolutions = new Map([
-  ["react", appRequire.resolve("react")],
-  ["react/jsx-runtime", appRequire.resolve("react/jsx-runtime")],
-  ["react/jsx-dev-runtime", appRequire.resolve("react/jsx-dev-runtime")],
-  ["react-dom/client", appRequire.resolve("react-dom/client")]
-]);
-Module._resolveFilename = function(request, parent, isMain, options) {
-  if (forcedResolutions.has(request)) {
-    return forcedResolutions.get(request);
-  }
-  return originalResolveFilename.call(this, request, parent, isMain, options);
-};
-const { createFileRouter } = require("@webtypen/webframez-react/router");
-const reactDomPkg = require.resolve("react-dom/package.json", {
-  paths: [process.cwd(), input.pagesDir]
-});
-const reactDomServer = require(path.join(path.dirname(reactDomPkg), "server.node.js"));
-
-(async () => {
-  const router = createFileRouter({ pagesDir: input.pagesDir });
-  const resolved = await router.resolve({
-    pathname: input.pathname,
-    searchParams: input.searchParams || {},
-    cookies: input.cookies || {},
-  });
-  const html = reactDomServer.renderToString(resolved.model);
-  process.stdout.write(JSON.stringify({ html }));
-})().catch((error) => {
-  process.stderr.write(error && (error.stack || String(error)) ? (error.stack || String(error)) : "Unknown SSR worker error");
-  process.exit(1);
-});
-`;
-  const { stdout } = await runNodeCommand(["-e", script, payload]);
-  const parsed = JSON.parse(stdout || "{}");
-  return parsed.html || "";
+      const entry = pending.get(message.id);
+      if (!entry) {
+        return;
+      }
+      pending.delete(message.id);
+      clearTimeout(entry.timeout);
+      if (message.ok) {
+        entry.resolve(message.html);
+        return;
+      }
+      entry.reject(new Error(message.error));
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderrBuffer = `${stderrBuffer}${chunk.toString("utf8")}`.slice(-8192);
+    });
+    child.on("exit", (code, signal) => {
+      const suffix = stderrBuffer.trim() !== "" ? `
+${stderrBuffer.trim()}` : "";
+      rejectPending(
+        new Error(
+          `[webframez-react] Initial HTML worker exited (${signal ?? code ?? "unknown"})${suffix}`
+        )
+      );
+      child = null;
+    });
+    child.on("error", (error) => {
+      rejectPending(error instanceof Error ? error : new Error(String(error)));
+      child = null;
+    });
+    return child;
+  };
+  return {
+    render(payload) {
+      const activeChild = startWorker();
+      const requestId = nextRequestId++;
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          rejectPending(new Error("[webframez-react] Initial HTML worker timed out"));
+          stopWorker();
+        }, 1e4);
+        pending.set(requestId, { resolve, reject, timeout });
+        const request = {
+          id: requestId,
+          type: "render",
+          payload
+        };
+        activeChild.send(request, (error) => {
+          if (!error) {
+            return;
+          }
+          const entry = pending.get(requestId);
+          if (!entry) {
+            return;
+          }
+          pending.delete(requestId);
+          clearTimeout(entry.timeout);
+          entry.reject(error instanceof Error ? error : new Error(String(error)));
+        });
+      });
+    },
+    dispose() {
+      rejectPending(new Error("[webframez-react] Initial HTML worker disposed"));
+      stopWorker();
+    }
+  };
 }
 function withRequestBasename(basename, fn) {
   const target = globalThis;
@@ -627,6 +725,13 @@ function createNodeRequestHandler(options) {
   const liveReloadClients = /* @__PURE__ */ new Set();
   const router = createFileRouter({ pagesDir });
   const moduleMap = JSON.parse(import_node_fs2.default.readFileSync(manifestPath, "utf-8"));
+  const initialHtmlWorker = createInitialHtmlWorker(pagesDir);
+  const disposeInitialHtmlWorker = () => {
+    initialHtmlWorker.dispose();
+  };
+  process.once("exit", disposeInitialHtmlWorker);
+  process.once("SIGINT", disposeInitialHtmlWorker);
+  process.once("SIGTERM", disposeInitialHtmlWorker);
   return async function handleRequest(req, res) {
     if (!req.url) {
       res.statusCode = 400;
@@ -726,8 +831,7 @@ function createNodeRequestHandler(options) {
     );
     let rootHtml = "";
     try {
-      rootHtml = await renderInitialHtmlInWorker({
-        pagesDir,
+      rootHtml = await initialHtmlWorker.render({
         pathname: stripBasePath(url.pathname, basePath),
         searchParams: parseSearchParams(url.searchParams),
         cookies: requestCookies,
