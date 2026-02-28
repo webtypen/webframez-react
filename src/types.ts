@@ -95,6 +95,7 @@ export type CreateHtmlShellOptions = {
   clientScriptUrl?: string;
   headTags?: string;
   rootHtml?: string;
+  initialFlightData?: string;
   basename?: string;
   liveReloadPath?: string;
   liveReloadServerId?: string;

@@ -7,6 +7,7 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
 });
 
 // src/server.ts
+import { Writable } from "node:stream";
 import { renderToPipeableStream } from "react-server-dom-webpack/server";
 function defaultOnError(err) {
   console.error("[webframez-react] RSC render error", err);
@@ -18,10 +19,12 @@ function createHTMLShell(options = {}) {
     clientScriptUrl = "/client.js",
     headTags = "",
     rootHtml = "",
+    initialFlightData = "",
     basename = "",
     liveReloadPath,
     liveReloadServerId
   } = options;
+  const escapedInitialFlightData = initialFlightData ? JSON.stringify(initialFlightData).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029") : '""';
   const liveReloadScript = liveReloadPath && liveReloadServerId ? `<script>
 (() => {
   const endpoint = ${JSON.stringify(liveReloadPath)};
@@ -66,10 +69,33 @@ function createHTMLShell(options = {}) {
     <div id="root">${rootHtml}</div>
     <script>window.__RSC_ENDPOINT = "${rscEndpoint}";</script>
     <script>window.__RSC_BASENAME = "${basename}";</script>
+    <script>window.__RSC_INITIAL_PAYLOAD = ${escapedInitialFlightData};</script>
     <script type="module" src="${clientScriptUrl}"></script>
     ${liveReloadScript}
   </body>
 </html>`;
+}
+function renderRSCToString(payload, options = {}) {
+  const {
+    moduleMap = {},
+    onError = defaultOnError
+  } = options;
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    const writable = new Writable({
+      write(chunk, _encoding, callback) {
+        const normalized = typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk);
+        chunks.push(normalized);
+        callback();
+      }
+    });
+    writable.on("finish", () => {
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    writable.on("error", reject);
+    const stream = renderToPipeableStream(payload, moduleMap, { onError });
+    stream.pipe(writable);
+  });
 }
 function sendRSC(res, model, options = {}) {
   const {
@@ -837,6 +863,10 @@ function createNodeRequestHandler(options) {
         cookies: requestCookies
       })
     );
+    const initialPayload = {
+      model: resolved.model,
+      head: resolved.head
+    };
     let rootHtml = "";
     try {
       rootHtml = await initialHtmlWorker.render({
@@ -874,6 +904,9 @@ function createNodeRequestHandler(options) {
         return;
       }
     }
+    const initialFlightData = await renderRSCToString(initialPayload, {
+      moduleMap
+    });
     res.statusCode = resolved.statusCode;
     res.setHeader("Content-Type", "text/html");
     res.end(
@@ -883,6 +916,7 @@ function createNodeRequestHandler(options) {
         clientScriptUrl,
         rscEndpoint: rscPath,
         rootHtml,
+        initialFlightData,
         basename: basePath,
         liveReloadPath: liveReloadPath || void 0,
         liveReloadServerId: liveReloadPath ? devServerId : void 0

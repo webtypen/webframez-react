@@ -1,6 +1,7 @@
+import { Writable } from "node:stream";
 import { renderToPipeableStream } from "react-server-dom-webpack/server";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { CreateHtmlShellOptions, SendRSCOptions } from "./types";
+import type { ClientNavigationPayload, CreateHtmlShellOptions, SendRSCOptions } from "./types";
 
 function defaultOnError(err: unknown) {
   console.error("[webframez-react] RSC render error", err);
@@ -13,10 +14,18 @@ export function createHTMLShell(options: CreateHtmlShellOptions = {}) {
     clientScriptUrl = "/client.js",
     headTags = "",
     rootHtml = "",
+    initialFlightData = "",
     basename = "",
     liveReloadPath,
     liveReloadServerId,
   } = options;
+
+  const escapedInitialFlightData = initialFlightData
+    ? JSON.stringify(initialFlightData)
+        .replace(/</g, "\\u003c")
+        .replace(/\u2028/g, "\\u2028")
+        .replace(/\u2029/g, "\\u2029")
+    : '""';
 
   const liveReloadScript =
     liveReloadPath && liveReloadServerId
@@ -66,10 +75,41 @@ export function createHTMLShell(options: CreateHtmlShellOptions = {}) {
     <div id="root">${rootHtml}</div>
     <script>window.__RSC_ENDPOINT = "${rscEndpoint}";</script>
     <script>window.__RSC_BASENAME = "${basename}";</script>
+    <script>window.__RSC_INITIAL_PAYLOAD = ${escapedInitialFlightData};</script>
     <script type="module" src="${clientScriptUrl}"></script>
     ${liveReloadScript}
   </body>
 </html>`;
+}
+
+export function renderRSCToString(
+  payload: ClientNavigationPayload,
+  options: Pick<SendRSCOptions, "moduleMap" | "onError"> = {}
+) {
+  const {
+    moduleMap = {},
+    onError = defaultOnError,
+  } = options;
+
+  return new Promise<string>((resolve, reject) => {
+    const chunks: Uint8Array[] = [];
+    const writable = new Writable({
+      write(chunk, _encoding, callback) {
+        const normalized =
+          typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk);
+        chunks.push(normalized);
+        callback();
+      },
+    });
+
+    writable.on("finish", () => {
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    writable.on("error", reject);
+
+    const stream = renderToPipeableStream(payload, moduleMap, { onError });
+    stream.pipe(writable);
+  });
 }
 
 export function sendRSC(

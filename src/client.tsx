@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { createRoot } from "react-dom/client";
-import { createFromFetch } from "react-server-dom-webpack/client";
+import { hydrateRoot } from "react-dom/client";
+import { createFromFetch, createFromReadableStream } from "react-server-dom-webpack/client";
 import type { Root } from "react-dom/client";
 import type { ClientNavigationPayload, HeadConfig, HeadLinkTag, HeadMetaTag } from "./types";
 
@@ -228,9 +228,52 @@ function applyHead(head: HeadConfig) {
   }
 }
 
+function createReadableStreamFromString(value: string) {
+  const encoder = new TextEncoder();
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(value));
+      controller.close();
+    },
+  });
+}
+
+function readInitialPayload(): Promise<ClientNavigationPayload> | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const value = (window as Window & { __RSC_INITIAL_PAYLOAD?: unknown }).__RSC_INITIAL_PAYLOAD;
+  if (typeof value !== "string" || value === "") {
+    return null;
+  }
+
+  delete (window as Window & { __RSC_INITIAL_PAYLOAD?: unknown }).__RSC_INITIAL_PAYLOAD;
+  return createFromReadableStream(
+    createReadableStreamFromString(value)
+  ) as Promise<ClientNavigationPayload>;
+}
+
 function createApp(rscEndpoint: string) {
   return function App() {
-    const [tree, setTree] = useState<React.ReactNode>(null);
+    const [initialResponse] = useState(
+      () =>
+        readInitialPayload() ??
+        (createFromFetch(
+          fetch(
+            `${rscEndpoint}?path=${encodeURIComponent(window.location.pathname)}&search=${encodeURIComponent(window.location.search)}`,
+            {
+              headers: {
+                Accept: "text/x-component",
+              },
+            }
+          )
+        ) as Promise<ClientNavigationPayload>)
+    );
+    const initialPayload = React.use(initialResponse);
+    const [tree, setTree] = useState<React.ReactNode>(initialPayload.model);
+    const [head, setHead] = useState<HeadConfig>(initialPayload.head);
     const [pending, setPending] = useState(false);
 
     async function navigate(url: URL, mode: "push" | "replace" | "none" = "push") {
@@ -250,6 +293,7 @@ function createApp(rscEndpoint: string) {
 
         const nextPayload = await (response as Promise<ClientNavigationPayload>);
         applyHead(nextPayload.head);
+        setHead(nextPayload.head);
         setTree(nextPayload.model);
 
         const nextHref = `${url.pathname}${url.search}`;
@@ -267,13 +311,15 @@ function createApp(rscEndpoint: string) {
     }
 
     useEffect(() => {
+      applyHead(head);
+    }, [head]);
+
+    useEffect(() => {
       const onPopState = () => {
-        navigate(new URL(window.location.href), "none");
+        void navigate(new URL(window.location.href), "none");
       };
 
       window.addEventListener("popstate", onPopState);
-
-      navigate(new URL(window.location.href), "none");
 
       return () => {
         window.removeEventListener("popstate", onPopState);
@@ -326,8 +372,7 @@ export function mountWebframezClient(options: ClientOptions = {}) {
   const rscEndpoint = options.rscEndpoint ?? endpointFromGlobal ?? "/rsc";
 
   const App = createApp(rscEndpoint);
-  const root = createRoot(rootEl);
-  root.render(<App />);
+  const root = hydrateRoot(rootEl, <App />);
 
   return root;
 }

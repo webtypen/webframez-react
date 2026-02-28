@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createHTMLShell, sendRSC } from "./server";
+import { createHTMLShell, renderRSCToString, sendRSC } from "./server";
 import { createFileRouter, parseSearchParams, renderHeadToString } from "./router";
 import type { ClientNavigationPayload } from "./types";
 
@@ -481,6 +481,10 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         cookies: requestCookies,
       })
     );
+    const initialPayload: ClientNavigationPayload = {
+      model: resolved.model,
+      head: resolved.head,
+    };
     let rootHtml = "";
     try {
       rootHtml = await initialHtmlWorker.render({
@@ -519,6 +523,10 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       }
     }
 
+    const initialFlightData = await renderRSCToString(initialPayload, {
+      moduleMap,
+    });
+
     res.statusCode = resolved.statusCode;
     res.setHeader("Content-Type", "text/html");
     res.end(
@@ -528,6 +536,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         clientScriptUrl,
         rscEndpoint: rscPath,
         rootHtml,
+        initialFlightData,
         basename: basePath,
         liveReloadPath: liveReloadPath || undefined,
         liveReloadServerId: liveReloadPath ? devServerId : undefined,
