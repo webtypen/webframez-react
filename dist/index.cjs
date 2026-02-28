@@ -515,6 +515,9 @@ function parseSearchParams(query) {
 var import_node_fs2 = __toESM(require("node:fs"), 1);
 var import_node_path2 = __toESM(require("node:path"), 1);
 var import_node_child_process = require("node:child_process");
+function createInitialHtmlErrorMarkup(message) {
+  return `<main style="font-family:system-ui,sans-serif;padding:24px"><h1 style="margin:0 0 12px">500</h1><p style="margin:0">${message}</p></main>`;
+}
 var INITIAL_HTML_WORKER_SCRIPT = `
 const path = require("node:path");
 const Module = require("node:module");
@@ -596,6 +599,12 @@ function stripBasePath(pathname, basePath) {
   }
   return pathname;
 }
+function sanitizeInitialHtmlWorkerNodeOptions(rawNodeOptions) {
+  if (!rawNodeOptions || rawNodeOptions.trim() === "") {
+    return "";
+  }
+  return rawNodeOptions.replace(/(^|\s)--conditions\s+react-server(?=\s|$)/g, " ").replace(/(^|\s)-r\s+(\S*webframez-react\/register)(?=\s|$)/g, " ").replace(/\s+/g, " ").trim();
+}
 function createInitialHtmlWorker(pagesDir) {
   let child = null;
   let nextRequestId = 1;
@@ -627,6 +636,7 @@ function createInitialHtmlWorker(pagesDir) {
       cwd: process.cwd(),
       env: {
         ...process.env,
+        NODE_OPTIONS: sanitizeInitialHtmlWorkerNodeOptions(process.env.NODE_OPTIONS),
         WEBFRAMEZ_REACT_PAGES_DIR: pagesDir
       },
       stdio: ["ignore", "ignore", "pipe", "ipc"]
@@ -873,6 +883,32 @@ function createNodeRequestHandler(options) {
       });
     } catch (error) {
       console.error("[webframez-react] Failed to render initial HTML", error);
+      try {
+        initialHtmlWorker.dispose();
+        rootHtml = await initialHtmlWorker.render({
+          pathname: stripBasePath(url.pathname, basePath),
+          searchParams: parseSearchParams(url.searchParams),
+          cookies: requestCookies,
+          basename: basePath
+        });
+      } catch (retryError) {
+        console.error("[webframez-react] Retry for initial HTML failed", retryError);
+        res.statusCode = 500;
+        res.setHeader("Content-Type", "text/html");
+        res.end(
+          createHTMLShell({
+            title: "500 - Initial HTML render failed",
+            headTags: "",
+            clientScriptUrl,
+            rscEndpoint: rscPath,
+            rootHtml: createInitialHtmlErrorMarkup("Initial HTML render failed."),
+            basename: basePath,
+            liveReloadPath: liveReloadPath || void 0,
+            liveReloadServerId: liveReloadPath ? devServerId : void 0
+          })
+        );
+        return;
+      }
     }
     res.statusCode = resolved.statusCode;
     res.setHeader("Content-Type", "text/html");
