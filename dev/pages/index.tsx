@@ -1,7 +1,7 @@
 "use server";
 
 import React from "react";
-import type { HeadConfig, PageProps } from "webframez-react/types";
+import type { HeadConfig, PageProps } from "@webtypen/webframez-react/types";
 
 export function Head(): HeadConfig {
   return {

@@ -27,6 +27,7 @@ function printHelp() {
       "  webframez-react watch:client",
       "  webframez-react build:server:webpack",
       "  webframez-react watch:server:webpack",
+      "  webframez-react exec -- <command> [args...]",
       "",
       "Config fallback order:",
       "  1) project root override file",
@@ -113,6 +114,11 @@ function resolveBinary(name) {
   }
 
   return name;
+}
+
+function buildReactServerNodeOptions() {
+  const existing = process.env.NODE_OPTIONS ? `${process.env.NODE_OPTIONS} ` : "";
+  return `${existing}--conditions react-server -r @webtypen/webframez-react/register`.trim();
 }
 
 async function loadProjectConfig() {
@@ -255,6 +261,21 @@ async function main() {
     }
 
     const code = await run("tsc", args);
+    process.exit(code);
+    return;
+  }
+
+  if (command === "exec") {
+    if (passthroughArgsClean.length === 0) {
+      console.error("[webframez-react] Missing command for exec.");
+      printHelp();
+      process.exit(1);
+    }
+
+    const [binaryName, ...binaryArgs] = passthroughArgsClean;
+    const code = await run(binaryName, binaryArgs, {
+      NODE_OPTIONS: buildReactServerNodeOptions(),
+    });
     process.exit(code);
     return;
   }

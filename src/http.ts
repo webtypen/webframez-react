@@ -57,15 +57,28 @@ function stripBasePath(pathname: string, basePath: string) {
 
 function runNodeCommand(args: string[]) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    execFile(process.execPath, args, { timeout: 10_000, maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
-      if (error) {
-        const out = stderr && stderr.trim() !== "" ? stderr : stdout;
-        reject(new Error(out || error.message));
-        return;
-      }
+    const execArgs = [
+      "--conditions",
+      "react-server",
+      "-r",
+      "@webtypen/webframez-react/register",
+      ...args,
+    ];
 
-      resolve({ stdout, stderr });
-    });
+    execFile(
+      process.execPath,
+      execArgs,
+      { timeout: 10_000, maxBuffer: 1024 * 1024 * 5 },
+      (error, stdout, stderr) => {
+        if (error) {
+          const out = stderr && stderr.trim() !== "" ? stderr : stdout;
+          reject(new Error(out || error.message));
+          return;
+        }
+
+        resolve({ stdout, stderr });
+      },
+    );
   });
 }
 
@@ -96,7 +109,7 @@ Module._resolveFilename = function(request, parent, isMain, options) {
   }
   return originalResolveFilename.call(this, request, parent, isMain, options);
 };
-const { createFileRouter } = require("webframez-react/router");
+const { createFileRouter } = require("@webtypen/webframez-react/router");
 const reactDomPkg = require.resolve("react-dom/package.json", {
   paths: [process.cwd(), input.pagesDir]
 });

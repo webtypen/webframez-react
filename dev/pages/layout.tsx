@@ -1,9 +1,9 @@
 "use server";
 
 import React from "react";
-import { Link } from "webframez-react/navigation";
-import { RouteChildren } from "webframez-react/router";
-import type { HeadConfig, RouteContext } from "webframez-react/types";
+import { Link } from "@webtypen/webframez-react/navigation";
+import { RouteChildren } from "@webtypen/webframez-react/router";
+import type { HeadConfig, RouteContext } from "@webtypen/webframez-react/types";
 import LogoutButton from "../src/components/LogoutButton";
 
 export function Head(): HeadConfig {

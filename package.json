@@ -58,6 +58,7 @@
       "import": "./dist/webframez-core.js",
       "require": "./dist/webframez-core.cjs"
     },
+    "./register": "./register.cjs",
     "./defaults/webpack.client": "./defaults/webpack.client.cjs",
     "./defaults/webpack.server": "./defaults/webpack.server.cjs",
     "./defaults/tsconfig.server": "./defaults/tsconfig.server.json",
@@ -67,7 +68,8 @@
   "files": [
     "dist",
     "defaults",
-    "bin"
+    "bin",
+    "register.cjs"
   ],
   "scripts": {
     "clean": "rm -rf dist",

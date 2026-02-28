@@ -1,10 +1,10 @@
 "use server";
 
 import React from "react";
-import { Redirect } from "webframez-react/navigation";
-import type { HeadConfig } from "webframez-react/types";
+import { Redirect } from "@webtypen/webframez-react/navigation";
+import type { HeadConfig } from "@webtypen/webframez-react/types";
 import LoginForm from "../../src/components/LoginForm";
-import type { PageProps } from "webframez-react/types";
+import type { PageProps } from "@webtypen/webframez-react/types";
 
 export function Head(): HeadConfig {
   return {

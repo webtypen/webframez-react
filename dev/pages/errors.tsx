@@ -1,7 +1,7 @@
 "use server";
 
 import React from "react";
-import type { ErrorPageProps, HeadConfig } from "webframez-react/types";
+import type { ErrorPageProps, HeadConfig } from "@webtypen/webframez-react/types";
 
 export function Head({ statusCode, message }: ErrorPageProps): HeadConfig {
   return {

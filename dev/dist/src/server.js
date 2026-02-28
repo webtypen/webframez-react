@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const node_path_1 = __importDefault(require("node:path"));
 const webframez_core_1 = require("@webtypen/webframez-core");
-const webframez_react_1 = require("webframez-react");
+const webframez_react_1 = require("@webtypen/webframez-react");
 const distRootDir = node_path_1.default.resolve(__dirname, "..");
 class Kernel extends webframez_core_1.BaseKernelWeb {
 }

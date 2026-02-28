@@ -6,7 +6,7 @@ import {
   Route,
   WebApplication,
 } from "@webtypen/webframez-core";
-import { initWebframezReact } from "webframez-react";
+import { initWebframezReact } from "@webtypen/webframez-react";
 
 const distRootDir = path.resolve(__dirname, "..");
 

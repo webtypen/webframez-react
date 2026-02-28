@@ -228,10 +228,10 @@ Recommended scripts:
     "build:server": "webframez-react build:server",
     "build:client": "webframez-react build:client",
     "build": "npm run build:server && npm run build:client",
-    "start": "node --conditions react-server start-server.cjs",
+    "start": "NODE_OPTIONS='--conditions react-server -r @webtypen/webframez-react/register' node start-server.cjs",
     "watch:server": "webframez-react watch:server",
     "watch:client": "webframez-react watch:client",
-    "serve:watch": "node --watch --conditions react-server start-server.cjs",
+    "serve:watch": "NODE_OPTIONS='--conditions react-server -r @webtypen/webframez-react/register' node --watch start-server.cjs",
     "watch": "sh -c 'npm run watch:server & npm run watch:client & npm run serve:watch & wait'",
     "dev": "sh -c 'npm run watch:server & npm run watch:client & npm run serve:watch & wait'"
   }
@@ -242,6 +242,29 @@ Notes:
 - `build` compiles the server output (`pages`, `server.ts`) and the browser client bundle (`client.tsx` + RSC manifests).
 - `start` runs the built app in React Server mode.
 - `watch` / `dev` keep TypeScript and webpack in watch mode and restart Node automatically when server output changes.
+- `@webtypen/webframez-react/register` activates the React Server module register, so `"use client"` modules are treated correctly in Node and in the package's SSR worker.
+
+If you run an existing `webframez-core` app directly with `ts-node` or `node`, use the same preload:
+
+```json
+{
+  "scripts": {
+    "start": "NODE_OPTIONS='--conditions react-server -r @webtypen/webframez-react/register' ts-node ./app.ts",
+    "watch:app": "nodemon --exec \"NODE_OPTIONS='--conditions react-server -r @webtypen/webframez-react/register' ts-node ./app.ts\""
+  }
+}
+```
+
+Or via the shipped wrapper command:
+
+```json
+{
+  "scripts": {
+    "start": "TS_NODE_FILES=true webframez-react exec -- ts-node ./app.ts",
+    "watch:app": "nodemon --exec \"TS_NODE_FILES=true webframez-react exec -- ts-node ./app.ts\""
+  }
+}
+```
 
 ## CLI Config and Custom Entry Paths
 

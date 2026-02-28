@@ -7,8 +7,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Head = Head;
 exports.default = Layout;
 const jsx_runtime_1 = require("react/jsx-runtime");
-const navigation_1 = require("webframez-react/navigation");
-const router_1 = require("webframez-react/router");
+const navigation_1 = require("@webtypen/webframez-react/navigation");
+const router_1 = require("@webtypen/webframez-react/router");
 const LogoutButton_1 = __importDefault(require("../src/components/LogoutButton"));
 function Head() {
     return {

@@ -3,7 +3,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = LogoutButton;
 const jsx_runtime_1 = require("react/jsx-runtime");
-const client_1 = require("webframez-react/client");
+const client_1 = require("@webtypen/webframez-react/client");
 function LogoutButton() {
     const cookie = (0, client_1.useCookie)();
     const router = (0, client_1.useRouter)();

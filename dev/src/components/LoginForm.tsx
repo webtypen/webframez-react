@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { useCookie, useRouter } from "webframez-react/client";
+import { useCookie, useRouter } from "@webtypen/webframez-react/client";
 
 export default function LoginForm() {
   const [email, setEmail] = useState("");

@@ -4,7 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = LoginForm;
 const jsx_runtime_1 = require("react/jsx-runtime");
 const react_1 = require("react");
-const client_1 = require("webframez-react/client");
+const client_1 = require("@webtypen/webframez-react/client");
 function LoginForm() {
     const [email, setEmail] = (0, react_1.useState)("");
     const [password, setPassword] = (0, react_1.useState)("");

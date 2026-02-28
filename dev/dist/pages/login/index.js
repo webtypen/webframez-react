@@ -7,7 +7,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Head = Head;
 exports.default = LoginPage;
 const jsx_runtime_1 = require("react/jsx-runtime");
-const navigation_1 = require("webframez-react/navigation");
+const navigation_1 = require("@webtypen/webframez-react/navigation");
 const LoginForm_1 = __importDefault(require("../../src/components/LoginForm"));
 function Head() {
     return {

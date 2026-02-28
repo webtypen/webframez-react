@@ -500,14 +500,26 @@ function stripBasePath(pathname, basePath) {
 }
 function runNodeCommand(args) {
   return new Promise((resolve, reject) => {
-    execFile(process.execPath, args, { timeout: 1e4, maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
-      if (error) {
-        const out = stderr && stderr.trim() !== "" ? stderr : stdout;
-        reject(new Error(out || error.message));
-        return;
+    const execArgs = [
+      "--conditions",
+      "react-server",
+      "-r",
+      "@webtypen/webframez-react/register",
+      ...args
+    ];
+    execFile(
+      process.execPath,
+      execArgs,
+      { timeout: 1e4, maxBuffer: 1024 * 1024 * 5 },
+      (error, stdout, stderr) => {
+        if (error) {
+          const out = stderr && stderr.trim() !== "" ? stderr : stdout;
+          reject(new Error(out || error.message));
+          return;
+        }
+        resolve({ stdout, stderr });
       }
-      resolve({ stdout, stderr });
-    });
+    );
   });
 }
 async function renderInitialHtmlInWorker(options) {
@@ -531,7 +543,7 @@ Module._resolveFilename = function(request, parent, isMain, options) {
   }
   return originalResolveFilename.call(this, request, parent, isMain, options);
 };
-const { createFileRouter } = require("webframez-react/router");
+const { createFileRouter } = require("@webtypen/webframez-react/router");
 const reactDomPkg = require.resolve("react-dom/package.json", {
   paths: [process.cwd(), input.pagesDir]
 });

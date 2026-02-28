@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useCookie, useRouter } from "webframez-react/client";
+import { useCookie, useRouter } from "@webtypen/webframez-react/client";
 
 export default function LogoutButton() {
   const cookie = useCookie();
