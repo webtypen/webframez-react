@@ -43,7 +43,6 @@ var import_node_child_process = require("node:child_process");
 var import_node_stream = require("node:stream");
 var import_server = require("react-server-dom-webpack/server");
 var import_client = require("react-server-dom-webpack/client.node");
-var import_server2 = require("react-dom/server");
 function defaultOnError(err) {
   console.error("[webframez-react] RSC render error", err);
 }
@@ -142,6 +141,7 @@ function createReadableStreamFromString(value) {
   });
 }
 async function renderHtmlFromFlightData(flightData, options) {
+  const { renderToString } = await import("react-dom/server.node");
   const model = await (0, import_client.createFromReadableStream)(createReadableStreamFromString(flightData), {
     serverConsumerManifest: {
       moduleMap: options.moduleMap ?? {},
@@ -149,7 +149,7 @@ async function renderHtmlFromFlightData(flightData, options) {
       moduleLoading: null
     }
   });
-  return (0, import_server2.renderToString)(model);
+  return renderToString(model);
 }
 function sendRSC(res, model, options = {}) {
   const {

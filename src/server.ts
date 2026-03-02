@@ -1,7 +1,6 @@
 import { Writable } from "node:stream";
 import { renderToPipeableStream } from "react-server-dom-webpack/server";
 import { createFromReadableStream } from "react-server-dom-webpack/client.node";
-import { renderToString } from "react-dom/server";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ClientNavigationPayload, CreateHtmlShellOptions, SendRSCOptions } from "./types";
 
@@ -129,6 +128,7 @@ export async function renderHtmlFromFlightData(
   flightData: string,
   options: Pick<SendRSCOptions, "moduleMap">
 ) {
+  const { renderToString } = await import("react-dom/server.node");
   const model = await createFromReadableStream(createReadableStreamFromString(flightData), {
     serverConsumerManifest: {
       moduleMap: options.moduleMap ?? {},

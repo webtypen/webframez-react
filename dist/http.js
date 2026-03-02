@@ -15,7 +15,6 @@ import { spawn } from "node:child_process";
 import { Writable } from "node:stream";
 import { renderToPipeableStream } from "react-server-dom-webpack/server";
 import { createFromReadableStream } from "react-server-dom-webpack/client.node";
-import { renderToString } from "react-dom/server";
 function defaultOnError(err) {
   console.error("[webframez-react] RSC render error", err);
 }
@@ -114,6 +113,7 @@ function createReadableStreamFromString(value) {
   });
 }
 async function renderHtmlFromFlightData(flightData, options) {
+  const { renderToString } = await import("react-dom/server.node");
   const model = await createFromReadableStream(createReadableStreamFromString(flightData), {
     serverConsumerManifest: {
       moduleMap: options.moduleMap ?? {},
