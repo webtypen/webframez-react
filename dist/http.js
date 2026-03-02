@@ -14,6 +14,8 @@ import { spawn } from "node:child_process";
 // src/server.ts
 import { Writable } from "node:stream";
 import { renderToPipeableStream } from "react-server-dom-webpack/server";
+import { createFromReadableStream } from "react-server-dom-webpack/client.node";
+import { renderToString } from "react-dom/server";
 function defaultOnError(err) {
   console.error("[webframez-react] RSC render error", err);
 }
@@ -101,6 +103,25 @@ function renderRSCToString(payload, options = {}) {
     const stream = renderToPipeableStream(payload, moduleMap, { onError });
     stream.pipe(writable);
   });
+}
+function createReadableStreamFromString(value) {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(value));
+      controller.close();
+    }
+  });
+}
+async function renderHtmlFromFlightData(flightData, options) {
+  const model = await createFromReadableStream(createReadableStreamFromString(flightData), {
+    serverConsumerManifest: {
+      moduleMap: options.moduleMap ?? {},
+      serverModuleMap: null,
+      moduleLoading: null
+    }
+  });
+  return renderToString(model);
 }
 function sendRSC(res, model, options = {}) {
   const {
@@ -841,6 +862,9 @@ function createNodeRequestHandler(options) {
       model: resolved.model,
       head: resolved.head
     };
+    const initialFlightData = await renderRSCToString(initialPayload, {
+      moduleMap
+    });
     let rootHtml = "";
     try {
       rootHtml = await initialHtmlWorker.render({
@@ -861,26 +885,29 @@ function createNodeRequestHandler(options) {
         });
       } catch (retryError) {
         console.error("[webframez-react] Retry for initial HTML failed", retryError);
-        res.statusCode = 500;
-        res.setHeader("Content-Type", "text/html");
-        res.end(
-          createHTMLShell({
-            title: "500 - Initial HTML render failed",
-            headTags: "",
-            clientScriptUrl,
-            rscEndpoint: rscPath,
-            rootHtml: createInitialHtmlErrorMarkup("Initial HTML render failed."),
-            basename: basePath,
-            liveReloadPath: liveReloadPath || void 0,
-            liveReloadServerId: liveReloadPath ? devServerId : void 0
-          })
-        );
-        return;
+        try {
+          rootHtml = await renderHtmlFromFlightData(initialFlightData, { moduleMap });
+        } catch (flightRenderError) {
+          console.error("[webframez-react] Flight-to-HTML render failed", flightRenderError);
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "text/html");
+          res.end(
+            createHTMLShell({
+              title: "500 - Initial HTML render failed",
+              headTags: "",
+              clientScriptUrl,
+              rscEndpoint: rscPath,
+              rootHtml: createInitialHtmlErrorMarkup("Initial HTML render failed."),
+              initialFlightData,
+              basename: basePath,
+              liveReloadPath: liveReloadPath || void 0,
+              liveReloadServerId: liveReloadPath ? devServerId : void 0
+            })
+          );
+          return;
+        }
       }
     }
-    const initialFlightData = await renderRSCToString(initialPayload, {
-      moduleMap
-    });
     res.statusCode = resolved.statusCode;
     res.setHeader("Content-Type", "text/html");
     res.end(

@@ -13,7 +13,15 @@ const sharedNode = {
   target: "node20",
   jsx: "automatic",
   legalComments: "none",
-  external: ["react", "react-dom", "react-dom/server", "react-server-dom-webpack", "node:*", "@webtypen/webframez-core"],
+  external: [
+    "react",
+    "react-dom",
+    "react-dom/server",
+    "react-server-dom-webpack",
+    "react-server-dom-webpack/client.node",
+    "node:*",
+    "@webtypen/webframez-core",
+  ],
 };
 
 const sharedClient = {

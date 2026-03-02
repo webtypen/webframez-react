@@ -1,5 +1,7 @@
 import { Writable } from "node:stream";
 import { renderToPipeableStream } from "react-server-dom-webpack/server";
+import { createFromReadableStream } from "react-server-dom-webpack/client.node";
+import { renderToString } from "react-dom/server";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ClientNavigationPayload, CreateHtmlShellOptions, SendRSCOptions } from "./types";
 
@@ -110,6 +112,32 @@ export function renderRSCToString(
     const stream = renderToPipeableStream(payload, moduleMap, { onError });
     stream.pipe(writable);
   });
+}
+
+function createReadableStreamFromString(value: string) {
+  const encoder = new TextEncoder();
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(value));
+      controller.close();
+    },
+  });
+}
+
+export async function renderHtmlFromFlightData(
+  flightData: string,
+  options: Pick<SendRSCOptions, "moduleMap">
+) {
+  const model = await createFromReadableStream(createReadableStreamFromString(flightData), {
+    serverConsumerManifest: {
+      moduleMap: options.moduleMap ?? {},
+      serverModuleMap: null,
+      moduleLoading: null,
+    },
+  });
+
+  return renderToString(model);
 }
 
 export function sendRSC(

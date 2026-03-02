@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createHTMLShell, renderRSCToString, sendRSC } from "./server";
+import { createHTMLShell, renderHtmlFromFlightData, renderRSCToString, sendRSC } from "./server";
 import { createFileRouter, parseSearchParams, renderHeadToString } from "./router";
 import type { ClientNavigationPayload } from "./types";
 
@@ -485,6 +485,9 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       model: resolved.model,
       head: resolved.head,
     };
+    const initialFlightData = await renderRSCToString(initialPayload, {
+      moduleMap,
+    });
     let rootHtml = "";
     try {
       rootHtml = await initialHtmlWorker.render({
@@ -505,27 +508,29 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         });
       } catch (retryError) {
         console.error("[webframez-react] Retry for initial HTML failed", retryError);
-        res.statusCode = 500;
-        res.setHeader("Content-Type", "text/html");
-        res.end(
-          createHTMLShell({
-            title: "500 - Initial HTML render failed",
-            headTags: "",
-            clientScriptUrl,
-            rscEndpoint: rscPath,
-            rootHtml: createInitialHtmlErrorMarkup("Initial HTML render failed."),
-            basename: basePath,
-            liveReloadPath: liveReloadPath || undefined,
-            liveReloadServerId: liveReloadPath ? devServerId : undefined,
-          }),
-        );
-        return;
+        try {
+          rootHtml = await renderHtmlFromFlightData(initialFlightData, { moduleMap });
+        } catch (flightRenderError) {
+          console.error("[webframez-react] Flight-to-HTML render failed", flightRenderError);
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "text/html");
+          res.end(
+            createHTMLShell({
+              title: "500 - Initial HTML render failed",
+              headTags: "",
+              clientScriptUrl,
+              rscEndpoint: rscPath,
+              rootHtml: createInitialHtmlErrorMarkup("Initial HTML render failed."),
+              initialFlightData,
+              basename: basePath,
+              liveReloadPath: liveReloadPath || undefined,
+              liveReloadServerId: liveReloadPath ? devServerId : undefined,
+            }),
+          );
+          return;
+        }
       }
     }
-
-    const initialFlightData = await renderRSCToString(initialPayload, {
-      moduleMap,
-    });
 
     res.statusCode = resolved.statusCode;
     res.setHeader("Content-Type", "text/html");
