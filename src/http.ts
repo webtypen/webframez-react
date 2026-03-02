@@ -60,6 +60,7 @@ type InitialHtmlWorkerResponse =
 const INITIAL_HTML_WORKER_SCRIPT = `
 const path = require("node:path");
 const Module = require("node:module");
+const { Writable } = require("node:stream");
 
 const pagesDir = process.env.WEBFRAMEZ_REACT_PAGES_DIR || "";
 if (!pagesDir) {
@@ -89,6 +90,41 @@ const reactDomPkg = require.resolve("react-dom/package.json", {
 const reactDomServer = require(path.join(path.dirname(reactDomPkg), "server.node.js"));
 const router = createFileRouter({ pagesDir });
 
+function renderHtml(model) {
+  return new Promise((resolve, reject) => {
+    let didError = false;
+    const chunks = [];
+    const writable = new Writable({
+      write(chunk, _encoding, callback) {
+        const normalized =
+          typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk);
+        chunks.push(normalized);
+        callback();
+      }
+    });
+
+    writable.on("finish", () => {
+      if (didError) {
+        reject(new Error("Initial HTML stream finished after a render error."));
+        return;
+      }
+
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    writable.on("error", reject);
+
+    const stream = reactDomServer.renderToPipeableStream(model, {
+      onAllReady() {
+        stream.pipe(writable);
+      },
+      onError(error) {
+        didError = true;
+        reject(error);
+      }
+    });
+  });
+}
+
 process.on("message", async (message) => {
   if (!message || message.type !== "render") {
     return;
@@ -103,7 +139,7 @@ process.on("message", async (message) => {
       searchParams: message.payload.searchParams || {},
       cookies: message.payload.cookies || {},
     });
-    const html = reactDomServer.renderToString(resolved.model);
+    const html = await renderHtml(resolved.model);
     if (typeof process.send === "function") {
       process.send({ id: message.id, ok: true, html });
     }

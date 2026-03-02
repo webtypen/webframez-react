@@ -36,11 +36,13 @@ module.exports = __toCommonJS(webframez_core_exports);
 
 // src/http.ts
 var import_node_fs2 = __toESM(require("node:fs"), 1);
-var import_node_path2 = __toESM(require("node:path"), 1);
+var import_node_path3 = __toESM(require("node:path"), 1);
 var import_node_child_process = require("node:child_process");
 
 // src/server.ts
+var import_node_path = __toESM(require("node:path"), 1);
 var import_node_stream = require("node:stream");
+var import_node_module = require("node:module");
 var import_server = require("react-server-dom-webpack/server");
 var import_client = require("react-server-dom-webpack/client.node");
 function defaultOnError(err) {
@@ -141,7 +143,9 @@ function createReadableStreamFromString(value) {
   });
 }
 async function renderHtmlFromFlightData(flightData, options) {
-  const { renderToString } = await import("react-dom/server.node");
+  const appRequire = (0, import_node_module.createRequire)(import_node_path.default.join(process.cwd(), "__webframez_react_server__.js"));
+  const reactDomPkg = appRequire.resolve("react-dom/package.json");
+  const { renderToString } = appRequire(import_node_path.default.join(import_node_path.default.dirname(reactDomPkg), "server.node.js"));
   const model = await (0, import_client.createFromReadableStream)(createReadableStreamFromString(flightData), {
     serverConsumerManifest: {
       moduleMap: options.moduleMap ?? {},
@@ -167,7 +171,7 @@ function sendRSC(res, model, options = {}) {
 
 // src/file-router.tsx
 var import_node_fs = __toESM(require("node:fs"), 1);
-var import_node_path = __toESM(require("node:path"), 1);
+var import_node_path2 = __toESM(require("node:path"), 1);
 
 // src/router-runtime.tsx
 var import_react = __toESM(require("react"), 1);
@@ -252,7 +256,7 @@ function walkFiles(dir) {
       continue;
     }
     for (const entry of import_node_fs.default.readdirSync(current, { withFileTypes: true })) {
-      const fullPath = import_node_path.default.join(current, entry.name);
+      const fullPath = import_node_path2.default.join(current, entry.name);
       if (entry.isDirectory()) {
         stack.push(fullPath);
       } else if (entry.isFile()) {
@@ -282,7 +286,7 @@ function toRouteEntry(pagesDir, filePath) {
   if (!normalized.endsWith("/index.js")) {
     return null;
   }
-  const relativeDir = import_node_path.default.dirname(import_node_path.default.relative(pagesDir, filePath)).replace(/\\/g, "/");
+  const relativeDir = import_node_path2.default.dirname(import_node_path2.default.relative(pagesDir, filePath)).replace(/\\/g, "/");
   const segments = relativeDir === "." ? [] : relativeDir.split("/").filter(Boolean);
   const staticCount = segments.filter((segment) => !segment.startsWith("[")).length;
   return {
@@ -425,8 +429,8 @@ function isRouteAbort(value) {
 }
 function createFileRouter(options) {
   const pagesDir = options.pagesDir;
-  const layoutPath = import_node_path.default.join(pagesDir, "layout.js");
-  const errorPath = import_node_path.default.join(pagesDir, "errors.js");
+  const layoutPath = import_node_path2.default.join(pagesDir, "layout.js");
+  const errorPath = import_node_path2.default.join(pagesDir, "errors.js");
   function buildRouteEntries() {
     const files = walkFiles(pagesDir);
     return files.map((filePath) => toRouteEntry(pagesDir, filePath)).filter((entry) => entry !== null).sort((a, b) => {
@@ -534,6 +538,7 @@ function createInitialHtmlErrorMarkup(message) {
 var INITIAL_HTML_WORKER_SCRIPT = `
 const path = require("node:path");
 const Module = require("node:module");
+const { Writable } = require("node:stream");
 
 const pagesDir = process.env.WEBFRAMEZ_REACT_PAGES_DIR || "";
 if (!pagesDir) {
@@ -563,6 +568,41 @@ const reactDomPkg = require.resolve("react-dom/package.json", {
 const reactDomServer = require(path.join(path.dirname(reactDomPkg), "server.node.js"));
 const router = createFileRouter({ pagesDir });
 
+function renderHtml(model) {
+  return new Promise((resolve, reject) => {
+    let didError = false;
+    const chunks = [];
+    const writable = new Writable({
+      write(chunk, _encoding, callback) {
+        const normalized =
+          typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk);
+        chunks.push(normalized);
+        callback();
+      }
+    });
+
+    writable.on("finish", () => {
+      if (didError) {
+        reject(new Error("Initial HTML stream finished after a render error."));
+        return;
+      }
+
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    writable.on("error", reject);
+
+    const stream = reactDomServer.renderToPipeableStream(model, {
+      onAllReady() {
+        stream.pipe(writable);
+      },
+      onError(error) {
+        didError = true;
+        reject(error);
+      }
+    });
+  });
+}
+
 process.on("message", async (message) => {
   if (!message || message.type !== "render") {
     return;
@@ -577,7 +617,7 @@ process.on("message", async (message) => {
       searchParams: message.payload.searchParams || {},
       cookies: message.payload.cookies || {},
     });
-    const html = reactDomServer.renderToString(resolved.model);
+    const html = await renderHtml(resolved.model);
     if (typeof process.send === "function") {
       process.send({ id: message.id, ok: true, html });
     }
@@ -766,10 +806,10 @@ function parseCookies(rawCookieHeader) {
 }
 function createNodeRequestHandler(options) {
   const devServerId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const distRootDir = import_node_path2.default.resolve(options.distRootDir);
-  const pagesDir = import_node_path2.default.resolve(options.pagesDir ?? import_node_path2.default.join(distRootDir, "pages"));
-  const manifestPath = import_node_path2.default.resolve(
-    options.manifestPath ?? import_node_path2.default.join(distRootDir, "react-client-manifest.json")
+  const distRootDir = import_node_path3.default.resolve(options.distRootDir);
+  const pagesDir = import_node_path3.default.resolve(options.pagesDir ?? import_node_path3.default.join(distRootDir, "pages"));
+  const manifestPath = import_node_path3.default.resolve(
+    options.manifestPath ?? import_node_path3.default.join(distRootDir, "react-client-manifest.json")
   );
   const assetsPrefix = options.assetsPrefix ?? "/assets/";
   const rscPath = options.rscPath ?? "/rsc";
@@ -858,13 +898,13 @@ function createNodeRequestHandler(options) {
     }
     if (url.pathname.startsWith(assetsPrefix)) {
       const relative = url.pathname.slice(assetsPrefix.length);
-      const filePath = import_node_path2.default.resolve(distRootDir, relative);
+      const filePath = import_node_path3.default.resolve(distRootDir, relative);
       if (!filePath.startsWith(distRootDir)) {
         res.statusCode = 400;
         res.end("Invalid path");
         return;
       }
-      const ext = import_node_path2.default.extname(filePath);
+      const ext = import_node_path3.default.extname(filePath);
       if (ext === ".js" || ext === ".mjs") {
         res.setHeader("Content-Type", "text/javascript; charset=utf-8");
       } else if (ext === ".json") {
@@ -955,8 +995,8 @@ function createNodeRequestHandler(options) {
 }
 
 // src/webframez-core.ts
-function normalizeMountPath(path3) {
-  const trimmed = (path3 || "").trim();
+function normalizeMountPath(path4) {
+  const trimmed = (path4 || "").trim();
   let normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   if (normalized.endsWith("/**")) {
     normalized = normalized.slice(0, -3);
@@ -968,8 +1008,8 @@ function normalizeMountPath(path3) {
   }
   return normalized || "/";
 }
-function buildRenderDefaults(path3) {
-  const mountPath = normalizeMountPath(path3);
+function buildRenderDefaults(path4) {
+  const mountPath = normalizeMountPath(path4);
   const routePath = mountPath === "/" ? "/*" : `${mountPath}/*`;
   if (mountPath === "/") {
     return {
@@ -1021,30 +1061,30 @@ function normalizeMethods(method) {
   }
   return Array.isArray(method) ? method : [method];
 }
-function registerByMethod(route, method, path3, component, routeOptions) {
+function registerByMethod(route, method, path4, component, routeOptions) {
   if (method === "GET") {
-    route.get(path3, component, routeOptions);
+    route.get(path4, component, routeOptions);
     return;
   }
   if (method === "POST") {
-    route.post(path3, component, routeOptions);
+    route.post(path4, component, routeOptions);
     return;
   }
   if (method === "PUT") {
-    route.put(path3, component, routeOptions);
+    route.put(path4, component, routeOptions);
     return;
   }
-  route.delete(path3, component, routeOptions);
+  route.delete(path4, component, routeOptions);
 }
 function registerRouteRenderer(route, methodName) {
   route.extend(methodName, () => {
-    return (path3, options) => {
+    return (path4, options) => {
       if (!options || !options.distRootDir) {
         throw new Error(
           `Route.${methodName} requires at least { distRootDir }`
         );
       }
-      const defaults = buildRenderDefaults(path3);
+      const defaults = buildRenderDefaults(path4);
       const {
         method,
         routeOptions,

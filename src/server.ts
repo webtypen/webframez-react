@@ -1,4 +1,6 @@
+import path from "node:path";
 import { Writable } from "node:stream";
+import { createRequire } from "node:module";
 import { renderToPipeableStream } from "react-server-dom-webpack/server";
 import { createFromReadableStream } from "react-server-dom-webpack/client.node";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -128,7 +130,11 @@ export async function renderHtmlFromFlightData(
   flightData: string,
   options: Pick<SendRSCOptions, "moduleMap">
 ) {
-  const { renderToString } = await import("react-dom/server.node");
+  const appRequire = createRequire(path.join(process.cwd(), "__webframez_react_server__.js"));
+  const reactDomPkg = appRequire.resolve("react-dom/package.json");
+  const { renderToString } = appRequire(path.join(path.dirname(reactDomPkg), "server.node.js")) as {
+    renderToString: (model: unknown) => string;
+  };
   const model = await createFromReadableStream(createReadableStreamFromString(flightData), {
     serverConsumerManifest: {
       moduleMap: options.moduleMap ?? {},
