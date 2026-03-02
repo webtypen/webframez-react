@@ -277,6 +277,7 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
     const [tree, setTree] = useState<React.ReactNode>(initialPayload.model);
     const [head, setHead] = useState<HeadConfig>(initialPayload.head);
     const [pending, setPending] = useState(false);
+    const [mounted, setMounted] = useState(false);
 
     async function navigate(url: URL, mode: "push" | "replace" | "none" = "push") {
       setPending(true);
@@ -317,6 +318,8 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
     }, [head]);
 
     useEffect(() => {
+      setMounted(true);
+
       const onPopState = () => {
         void navigate(new URL(window.location.href), "none");
       };
@@ -344,19 +347,20 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
     );
     writeGlobalRouter(routerValue);
 
+    const content = (
+      <>
+        {mounted ? <LoaderBar active={pending} /> : null}
+        {tree ?? <p style={{ padding: 24 }}>Loading...</p>}
+      </>
+    );
+
     if (!RouterContext) {
-      return (
-        <>
-          <LoaderBar active={pending} />
-          {tree ?? <p style={{ padding: 24 }}>Loading...</p>}
-        </>
-      );
+      return content;
     }
 
     return (
       <RouterContext.Provider value={routerValue}>
-        <LoaderBar active={pending} />
-        {tree ?? <p style={{ padding: 24 }}>Loading...</p>}
+        {content}
       </RouterContext.Provider>
     );
   };
