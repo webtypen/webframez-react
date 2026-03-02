@@ -255,22 +255,24 @@ function readInitialPayload(): Promise<ClientNavigationPayload> | null {
   ) as Promise<ClientNavigationPayload>;
 }
 
-function createApp(rscEndpoint: string) {
+function createInitialResponse(rscEndpoint: string) {
+  return (
+    readInitialPayload() ??
+    (createFromFetch(
+      fetch(
+        `${rscEndpoint}?path=${encodeURIComponent(window.location.pathname)}&search=${encodeURIComponent(window.location.search)}`,
+        {
+          headers: {
+            Accept: "text/x-component",
+          },
+        }
+      )
+    ) as Promise<ClientNavigationPayload>)
+  );
+}
+
+function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoint: string) {
   return function App() {
-    const [initialResponse] = useState(
-      () =>
-        readInitialPayload() ??
-        (createFromFetch(
-          fetch(
-            `${rscEndpoint}?path=${encodeURIComponent(window.location.pathname)}&search=${encodeURIComponent(window.location.search)}`,
-            {
-              headers: {
-                Accept: "text/x-component",
-              },
-            }
-          )
-        ) as Promise<ClientNavigationPayload>)
-    );
     const initialPayload = React.use(initialResponse);
     const [tree, setTree] = useState<React.ReactNode>(initialPayload.model);
     const [head, setHead] = useState<HeadConfig>(initialPayload.head);
@@ -371,7 +373,8 @@ export function mountWebframezClient(options: ClientOptions = {}) {
     typeof window !== "undefined" && (window as Window & { __RSC_ENDPOINT?: string }).__RSC_ENDPOINT;
   const rscEndpoint = options.rscEndpoint ?? endpointFromGlobal ?? "/rsc";
 
-  const App = createApp(rscEndpoint);
+  const initialResponse = createInitialResponse(rscEndpoint);
+  const App = createApp(initialResponse, rscEndpoint);
   const root = hydrateRoot(rootEl, <App />);
 
   return root;
