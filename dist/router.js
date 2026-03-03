@@ -8,6 +8,7 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
 
 // src/file-router.tsx
 import fs from "node:fs";
+import Module from "node:module";
 import path from "node:path";
 
 // src/router-runtime.tsx
@@ -70,6 +71,26 @@ function injectRouteChildren(node, routeChildren) {
 
 // src/file-router.tsx
 import { jsx, jsxs } from "react/jsx-runtime";
+var ROOT_RUNTIME_REQUIRE = Module.createRequire(
+  path.join(process.cwd(), "__webframez_react_runtime__.js")
+);
+var FORCED_PACKAGE_REQUESTS = [
+  "@webtypen/webframez-core",
+  "@webtypen/webframez-react",
+  "react",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+  "react-dom",
+  "react-dom/client",
+  "react-dom/server",
+  "react-dom/server.node",
+  "react-server-dom-webpack",
+  "react-server-dom-webpack/server",
+  "react-server-dom-webpack/client",
+  "react-server-dom-webpack/client.node",
+  "scheduler"
+];
+var forcedPackageResolutionInstalled = false;
 function normalizePathname(pathname) {
   const trimmed = pathname.replace(/\/+$/, "") || "/";
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
@@ -117,6 +138,28 @@ function escapeHtml(value) {
 var MANAGED_HEAD_ATTR = "data-webframez-head";
 function createManagedAttributes() {
   return `${MANAGED_HEAD_ATTR}="true"`;
+}
+function shouldForcePackageResolution(request) {
+  return FORCED_PACKAGE_REQUESTS.some(
+    (candidate) => request === candidate || request.startsWith(`${candidate}/`)
+  );
+}
+function installForcedPackageResolution() {
+  if (forcedPackageResolutionInstalled) {
+    return;
+  }
+  const moduleWithPrivateResolver = Module;
+  const originalResolveFilename = moduleWithPrivateResolver._resolveFilename;
+  moduleWithPrivateResolver._resolveFilename = function patchedResolveFilename(request, parent, isMain, options) {
+    if (typeof request === "string" && shouldForcePackageResolution(request)) {
+      try {
+        return ROOT_RUNTIME_REQUIRE.resolve(request);
+      } catch {
+      }
+    }
+    return originalResolveFilename.call(this, request, parent, isMain, options);
+  };
+  forcedPackageResolutionInstalled = true;
 }
 function toRouteEntry(pagesDir, filePath) {
   const normalized = filePath.replace(/\\/g, "/");
@@ -265,6 +308,7 @@ function isRouteAbort(value) {
   }
 }
 function createFileRouter(options) {
+  installForcedPackageResolution();
   const pagesDir = options.pagesDir;
   const layoutPath = path.join(pagesDir, "layout.js");
   const errorPath = path.join(pagesDir, "errors.js");

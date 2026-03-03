@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import Module from "node:module";
 import path from "node:path";
 import React from "react";
 import { injectRouteChildren } from "./router-runtime";
@@ -30,6 +31,27 @@ type ResolveInput = {
   searchParams: RouteSearchParams;
   cookies?: Record<string, string>;
 };
+
+const ROOT_RUNTIME_REQUIRE = Module.createRequire(
+  path.join(process.cwd(), "__webframez_react_runtime__.js"),
+);
+const FORCED_PACKAGE_REQUESTS = [
+  "@webtypen/webframez-core",
+  "@webtypen/webframez-react",
+  "react",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+  "react-dom",
+  "react-dom/client",
+  "react-dom/server",
+  "react-dom/server.node",
+  "react-server-dom-webpack",
+  "react-server-dom-webpack/server",
+  "react-server-dom-webpack/client",
+  "react-server-dom-webpack/client.node",
+  "scheduler",
+] as const;
+let forcedPackageResolutionInstalled = false;
 
 type RouteAbort = {
   __webframezRouteAbort: true;
@@ -109,6 +131,45 @@ const MANAGED_HEAD_ATTR = "data-webframez-head";
 
 function createManagedAttributes() {
   return `${MANAGED_HEAD_ATTR}="true"`;
+}
+
+function shouldForcePackageResolution(request: string) {
+  return FORCED_PACKAGE_REQUESTS.some(
+    (candidate) => request === candidate || request.startsWith(`${candidate}/`),
+  );
+}
+
+function installForcedPackageResolution() {
+  if (forcedPackageResolutionInstalled) {
+    return;
+  }
+
+  const moduleWithPrivateResolver = Module as typeof Module & {
+    _resolveFilename: (
+      request: string,
+      parent: NodeModule | null | undefined,
+      isMain: boolean,
+      options?: Record<string, unknown>,
+    ) => string;
+  };
+  const originalResolveFilename = moduleWithPrivateResolver._resolveFilename;
+  moduleWithPrivateResolver._resolveFilename = function patchedResolveFilename(
+    request,
+    parent,
+    isMain,
+    options,
+  ) {
+    if (typeof request === "string" && shouldForcePackageResolution(request)) {
+      try {
+        return ROOT_RUNTIME_REQUIRE.resolve(request);
+      } catch {
+        // Fall through to Node's default resolver.
+      }
+    }
+
+    return originalResolveFilename.call(this, request, parent, isMain, options);
+  };
+  forcedPackageResolutionInstalled = true;
 }
 
 function toRouteEntry(pagesDir: string, filePath: string): RouteEntry | null {
@@ -306,6 +367,8 @@ function isRouteAbort(value: unknown): value is RouteAbort {
 }
 
 export function createFileRouter(options: { pagesDir: string }) {
+  installForcedPackageResolution();
+
   const pagesDir = options.pagesDir;
   const layoutPath = path.join(pagesDir, "layout.js");
   const errorPath = path.join(pagesDir, "errors.js");

@@ -202,6 +202,7 @@ function createRSCHandler(options) {
 
 // src/file-router.tsx
 var import_node_fs = __toESM(require("node:fs"), 1);
+var import_node_module2 = __toESM(require("node:module"), 1);
 var import_node_path2 = __toESM(require("node:path"), 1);
 
 // src/router-runtime.tsx
@@ -264,6 +265,26 @@ function injectRouteChildren(node, routeChildren) {
 
 // src/file-router.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
+var ROOT_RUNTIME_REQUIRE = import_node_module2.default.createRequire(
+  import_node_path2.default.join(process.cwd(), "__webframez_react_runtime__.js")
+);
+var FORCED_PACKAGE_REQUESTS = [
+  "@webtypen/webframez-core",
+  "@webtypen/webframez-react",
+  "react",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+  "react-dom",
+  "react-dom/client",
+  "react-dom/server",
+  "react-dom/server.node",
+  "react-server-dom-webpack",
+  "react-server-dom-webpack/server",
+  "react-server-dom-webpack/client",
+  "react-server-dom-webpack/client.node",
+  "scheduler"
+];
+var forcedPackageResolutionInstalled = false;
 function normalizePathname(pathname) {
   const trimmed = pathname.replace(/\/+$/, "") || "/";
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
@@ -311,6 +332,28 @@ function escapeHtml(value) {
 var MANAGED_HEAD_ATTR = "data-webframez-head";
 function createManagedAttributes() {
   return `${MANAGED_HEAD_ATTR}="true"`;
+}
+function shouldForcePackageResolution(request) {
+  return FORCED_PACKAGE_REQUESTS.some(
+    (candidate) => request === candidate || request.startsWith(`${candidate}/`)
+  );
+}
+function installForcedPackageResolution() {
+  if (forcedPackageResolutionInstalled) {
+    return;
+  }
+  const moduleWithPrivateResolver = import_node_module2.default;
+  const originalResolveFilename = moduleWithPrivateResolver._resolveFilename;
+  moduleWithPrivateResolver._resolveFilename = function patchedResolveFilename(request, parent, isMain, options) {
+    if (typeof request === "string" && shouldForcePackageResolution(request)) {
+      try {
+        return ROOT_RUNTIME_REQUIRE.resolve(request);
+      } catch {
+      }
+    }
+    return originalResolveFilename.call(this, request, parent, isMain, options);
+  };
+  forcedPackageResolutionInstalled = true;
 }
 function toRouteEntry(pagesDir, filePath) {
   const normalized = filePath.replace(/\\/g, "/");
@@ -459,6 +502,7 @@ function isRouteAbort(value) {
   }
 }
 function createFileRouter(options) {
+  installForcedPackageResolution();
   const pagesDir = options.pagesDir;
   const layoutPath = import_node_path2.default.join(pagesDir, "layout.js");
   const errorPath = import_node_path2.default.join(pagesDir, "errors.js");
@@ -652,18 +696,33 @@ if (!pagesDir) {
   throw new Error("Missing WEBFRAMEZ_REACT_PAGES_DIR");
 }
 
-const appRequire = Module.createRequire(path.join(pagesDir, "__webframez_react_worker__.js"));
+const rootRequire = Module.createRequire(path.join(process.cwd(), "__webframez_react_worker__.js"));
 const originalResolveFilename = Module._resolveFilename;
 const forcedResolutions = new Map([
-  ["react", appRequire.resolve("react")],
-  ["react/jsx-runtime", appRequire.resolve("react/jsx-runtime")],
-  ["react/jsx-dev-runtime", appRequire.resolve("react/jsx-dev-runtime")],
-  ["react-dom/client", appRequire.resolve("react-dom/client")]
+  ["@webtypen/webframez-core", rootRequire.resolve("@webtypen/webframez-core")],
+  ["@webtypen/webframez-react", rootRequire.resolve("@webtypen/webframez-react")],
+  ["react", rootRequire.resolve("react")],
+  ["react/jsx-runtime", rootRequire.resolve("react/jsx-runtime")],
+  ["react/jsx-dev-runtime", rootRequire.resolve("react/jsx-dev-runtime")],
+  ["react-dom", rootRequire.resolve("react-dom")],
+  ["react-dom/client", rootRequire.resolve("react-dom/client")],
+  ["react-dom/server", rootRequire.resolve("react-dom/server")],
+  ["react-dom/server.node", rootRequire.resolve("react-dom/server.node")],
+  ["react-server-dom-webpack", rootRequire.resolve("react-server-dom-webpack")],
+  ["react-server-dom-webpack/server", rootRequire.resolve("react-server-dom-webpack/server")],
+  ["react-server-dom-webpack/client", rootRequire.resolve("react-server-dom-webpack/client")],
+  ["react-server-dom-webpack/client.node", rootRequire.resolve("react-server-dom-webpack/client.node")],
+  ["scheduler", rootRequire.resolve("scheduler")]
 ]);
 
 Module._resolveFilename = function(request, parent, isMain, options) {
   if (forcedResolutions.has(request)) {
     return forcedResolutions.get(request);
+  }
+  for (const forcedRequest of forcedResolutions.keys()) {
+    if (request.startsWith(forcedRequest + "/")) {
+      return rootRequire.resolve(request);
+    }
   }
   return originalResolveFilename.call(this, request, parent, isMain, options);
 };

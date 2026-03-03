@@ -68,18 +68,33 @@ if (!pagesDir) {
   throw new Error("Missing WEBFRAMEZ_REACT_PAGES_DIR");
 }
 
-const appRequire = Module.createRequire(path.join(pagesDir, "__webframez_react_worker__.js"));
+const rootRequire = Module.createRequire(path.join(process.cwd(), "__webframez_react_worker__.js"));
 const originalResolveFilename = Module._resolveFilename;
 const forcedResolutions = new Map([
-  ["react", appRequire.resolve("react")],
-  ["react/jsx-runtime", appRequire.resolve("react/jsx-runtime")],
-  ["react/jsx-dev-runtime", appRequire.resolve("react/jsx-dev-runtime")],
-  ["react-dom/client", appRequire.resolve("react-dom/client")]
+  ["@webtypen/webframez-core", rootRequire.resolve("@webtypen/webframez-core")],
+  ["@webtypen/webframez-react", rootRequire.resolve("@webtypen/webframez-react")],
+  ["react", rootRequire.resolve("react")],
+  ["react/jsx-runtime", rootRequire.resolve("react/jsx-runtime")],
+  ["react/jsx-dev-runtime", rootRequire.resolve("react/jsx-dev-runtime")],
+  ["react-dom", rootRequire.resolve("react-dom")],
+  ["react-dom/client", rootRequire.resolve("react-dom/client")],
+  ["react-dom/server", rootRequire.resolve("react-dom/server")],
+  ["react-dom/server.node", rootRequire.resolve("react-dom/server.node")],
+  ["react-server-dom-webpack", rootRequire.resolve("react-server-dom-webpack")],
+  ["react-server-dom-webpack/server", rootRequire.resolve("react-server-dom-webpack/server")],
+  ["react-server-dom-webpack/client", rootRequire.resolve("react-server-dom-webpack/client")],
+  ["react-server-dom-webpack/client.node", rootRequire.resolve("react-server-dom-webpack/client.node")],
+  ["scheduler", rootRequire.resolve("scheduler")]
 ]);
 
 Module._resolveFilename = function(request, parent, isMain, options) {
   if (forcedResolutions.has(request)) {
     return forcedResolutions.get(request);
+  }
+  for (const forcedRequest of forcedResolutions.keys()) {
+    if (request.startsWith(forcedRequest + "/")) {
+      return rootRequire.resolve(request);
+    }
   }
   return originalResolveFilename.call(this, request, parent, isMain, options);
 };
