@@ -944,6 +944,11 @@ function normalizeClientManifest(manifest, options) {
     import_node_path3.default.resolve(options.cwd, "node_modules"),
     import_node_path3.default.resolve(options.distRootDir, "..", "..", "node_modules")
   ]);
+  const addAlias = (aliasKey, value) => {
+    if (!(aliasKey in normalized)) {
+      normalized[aliasKey] = value;
+    }
+  };
   for (const [key, value] of Object.entries(manifest)) {
     if (!key.startsWith("file://")) {
       continue;
@@ -960,12 +965,14 @@ function normalizeClientManifest(manifest, options) {
       continue;
     }
     const relativeModulePath = absolutePath.slice(markerIndex + marker.length);
+    const relativeModulePathPosix = relativeModulePath.split(import_node_path3.default.sep).join("/");
+    addAlias(`./node_modules/${relativeModulePathPosix}`, value);
+    addAlias(`node_modules/${relativeModulePathPosix}`, value);
+    addAlias(absolutePath, value);
     for (const nodeModulesDir of candidateNodeModulesDirs) {
       const aliasPath = import_node_path3.default.join(nodeModulesDir, relativeModulePath);
-      const aliasKey = (0, import_node_url.pathToFileURL)(aliasPath).href;
-      if (!(aliasKey in normalized)) {
-        normalized[aliasKey] = value;
-      }
+      addAlias(aliasPath, value);
+      addAlias((0, import_node_url.pathToFileURL)(aliasPath).href, value);
     }
   }
   return normalized;
