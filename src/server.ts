@@ -135,13 +135,18 @@ export async function renderHtmlFromFlightData(
   const { renderToString } = appRequire(path.join(path.dirname(reactDomPkg), "server.node.js")) as {
     renderToString: (model: unknown) => string;
   };
-  const model = await createFromReadableStream(createReadableStreamFromString(flightData), {
+  const payload = await createFromReadableStream(createReadableStreamFromString(flightData), {
     serverConsumerManifest: {
       moduleMap: options.moduleMap ?? {},
       serverModuleMap: null,
       moduleLoading: null,
     },
   });
+
+  const model =
+    payload && typeof payload === "object" && "model" in payload
+      ? payload.model
+      : payload;
 
   return renderToString(model);
 }

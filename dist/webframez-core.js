@@ -700,13 +700,18 @@ function createReadableStreamFromString(value) {
 }
 
 async function renderHtmlFromFlightData(flightData, moduleMap) {
-  const model = await createFromReadableStream(createReadableStreamFromString(flightData), {
+  const payload = await createFromReadableStream(createReadableStreamFromString(flightData), {
     serverConsumerManifest: {
       moduleMap: moduleMap || {},
       serverModuleMap: null,
       moduleLoading: null
     }
   });
+
+  const model =
+    payload && typeof payload === "object" && "model" in payload
+      ? payload.model
+      : payload;
 
   return renderHtml(model);
 }
