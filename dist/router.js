@@ -71,9 +71,6 @@ function injectRouteChildren(node, routeChildren) {
 
 // src/file-router.tsx
 import { jsx, jsxs } from "react/jsx-runtime";
-var ROOT_RUNTIME_REQUIRE = Module.createRequire(
-  path.join(process.cwd(), "__webframez_react_runtime__.js")
-);
 var FORCED_PACKAGE_REQUESTS = [
   "@webtypen/webframez-core",
   "@webtypen/webframez-react",
@@ -150,10 +147,16 @@ function installForcedPackageResolution() {
   }
   const moduleWithPrivateResolver = Module;
   const originalResolveFilename = moduleWithPrivateResolver._resolveFilename;
+  const rootParent = {
+    id: "__webframez_react_runtime__",
+    filename: path.join(process.cwd(), "__webframez_react_runtime__.js"),
+    path: process.cwd(),
+    paths: moduleWithPrivateResolver._nodeModulePaths(process.cwd())
+  };
   moduleWithPrivateResolver._resolveFilename = function patchedResolveFilename(request, parent, isMain, options) {
     if (typeof request === "string" && shouldForcePackageResolution(request)) {
       try {
-        return ROOT_RUNTIME_REQUIRE.resolve(request);
+        return originalResolveFilename.call(this, request, rootParent, false, options);
       } catch {
       }
     }

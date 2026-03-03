@@ -32,9 +32,6 @@ type ResolveInput = {
   cookies?: Record<string, string>;
 };
 
-const ROOT_RUNTIME_REQUIRE = Module.createRequire(
-  path.join(process.cwd(), "__webframez_react_runtime__.js"),
-);
 const FORCED_PACKAGE_REQUESTS = [
   "@webtypen/webframez-core",
   "@webtypen/webframez-react",
@@ -151,8 +148,16 @@ function installForcedPackageResolution() {
       isMain: boolean,
       options?: Record<string, unknown>,
     ) => string;
+    _nodeModulePaths: (from: string) => string[];
   };
   const originalResolveFilename = moduleWithPrivateResolver._resolveFilename;
+  const rootParent = {
+    id: "__webframez_react_runtime__",
+    filename: path.join(process.cwd(), "__webframez_react_runtime__.js"),
+    path: process.cwd(),
+    paths: moduleWithPrivateResolver._nodeModulePaths(process.cwd()),
+  } as NodeModule & { paths: string[] };
+
   moduleWithPrivateResolver._resolveFilename = function patchedResolveFilename(
     request,
     parent,
@@ -161,7 +166,7 @@ function installForcedPackageResolution() {
   ) {
     if (typeof request === "string" && shouldForcePackageResolution(request)) {
       try {
-        return ROOT_RUNTIME_REQUIRE.resolve(request);
+        return originalResolveFilename.call(this, request, rootParent, false, options);
       } catch {
         // Fall through to Node's default resolver.
       }

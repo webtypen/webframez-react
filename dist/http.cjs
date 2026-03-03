@@ -131,28 +131,6 @@ function renderRSCToString(payload, options = {}) {
     stream.pipe(writable);
   });
 }
-function createReadableStreamFromString(value) {
-  const encoder = new TextEncoder();
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(encoder.encode(value));
-      controller.close();
-    }
-  });
-}
-async function renderHtmlFromFlightData(flightData, options) {
-  const appRequire = (0, import_node_module.createRequire)(import_node_path.default.join(process.cwd(), "__webframez_react_server__.js"));
-  const reactDomPkg = appRequire.resolve("react-dom/package.json");
-  const { renderToString } = appRequire(import_node_path.default.join(import_node_path.default.dirname(reactDomPkg), "server.node.js"));
-  const model = await (0, import_client.createFromReadableStream)(createReadableStreamFromString(flightData), {
-    serverConsumerManifest: {
-      moduleMap: options.moduleMap ?? {},
-      serverModuleMap: null,
-      moduleLoading: null
-    }
-  });
-  return renderToString(model);
-}
 function sendRSC(res, model, options = {}) {
   const {
     moduleMap = {},
@@ -232,9 +210,6 @@ function injectRouteChildren(node, routeChildren) {
 
 // src/file-router.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
-var ROOT_RUNTIME_REQUIRE = import_node_module2.default.createRequire(
-  import_node_path2.default.join(process.cwd(), "__webframez_react_runtime__.js")
-);
 var FORCED_PACKAGE_REQUESTS = [
   "@webtypen/webframez-core",
   "@webtypen/webframez-react",
@@ -311,10 +286,16 @@ function installForcedPackageResolution() {
   }
   const moduleWithPrivateResolver = import_node_module2.default;
   const originalResolveFilename = moduleWithPrivateResolver._resolveFilename;
+  const rootParent = {
+    id: "__webframez_react_runtime__",
+    filename: import_node_path2.default.join(process.cwd(), "__webframez_react_runtime__.js"),
+    path: process.cwd(),
+    paths: moduleWithPrivateResolver._nodeModulePaths(process.cwd())
+  };
   moduleWithPrivateResolver._resolveFilename = function patchedResolveFilename(request, parent, isMain, options) {
     if (typeof request === "string" && shouldForcePackageResolution(request)) {
       try {
-        return ROOT_RUNTIME_REQUIRE.resolve(request);
+        return originalResolveFilename.call(this, request, rootParent, false, options);
       } catch {
       }
     }
@@ -653,39 +634,46 @@ var INITIAL_HTML_WORKER_SCRIPT = `
 const path = require("node:path");
 const Module = require("node:module");
 const { Writable } = require("node:stream");
+const { createFromReadableStream } = require("react-server-dom-webpack/client.node");
 
 const pagesDir = process.env.WEBFRAMEZ_REACT_PAGES_DIR || "";
 if (!pagesDir) {
   throw new Error("Missing WEBFRAMEZ_REACT_PAGES_DIR");
 }
 
-const rootRequire = Module.createRequire(path.join(process.cwd(), "__webframez_react_worker__.js"));
 const originalResolveFilename = Module._resolveFilename;
-const forcedResolutions = new Map([
-  ["@webtypen/webframez-core", rootRequire.resolve("@webtypen/webframez-core")],
-  ["@webtypen/webframez-react", rootRequire.resolve("@webtypen/webframez-react")],
-  ["react", rootRequire.resolve("react")],
-  ["react/jsx-runtime", rootRequire.resolve("react/jsx-runtime")],
-  ["react/jsx-dev-runtime", rootRequire.resolve("react/jsx-dev-runtime")],
-  ["react-dom", rootRequire.resolve("react-dom")],
-  ["react-dom/client", rootRequire.resolve("react-dom/client")],
-  ["react-dom/server", rootRequire.resolve("react-dom/server")],
-  ["react-dom/server.node", rootRequire.resolve("react-dom/server.node")],
-  ["react-server-dom-webpack", rootRequire.resolve("react-server-dom-webpack")],
-  ["react-server-dom-webpack/server", rootRequire.resolve("react-server-dom-webpack/server")],
-  ["react-server-dom-webpack/client", rootRequire.resolve("react-server-dom-webpack/client")],
-  ["react-server-dom-webpack/client.node", rootRequire.resolve("react-server-dom-webpack/client.node")],
-  ["scheduler", rootRequire.resolve("scheduler")]
-]);
+const rootParent = {
+  id: "__webframez_react_worker__",
+  filename: path.join(process.cwd(), "__webframez_react_worker__.js"),
+  path: process.cwd(),
+  paths: Module._nodeModulePaths(process.cwd()),
+};
+const forcedPackageRequests = [
+  "@webtypen/webframez-core",
+  "@webtypen/webframez-react",
+  "react",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+  "react-dom",
+  "react-dom/client",
+  "react-dom/server",
+  "react-dom/server.node",
+  "react-server-dom-webpack",
+  "react-server-dom-webpack/server",
+  "react-server-dom-webpack/client",
+  "react-server-dom-webpack/client.node",
+  "scheduler"
+];
+
+function shouldForcePackageResolution(request) {
+  return forcedPackageRequests.some((candidate) =>
+    request === candidate || request.startsWith(candidate + "/")
+  );
+}
 
 Module._resolveFilename = function(request, parent, isMain, options) {
-  if (forcedResolutions.has(request)) {
-    return forcedResolutions.get(request);
-  }
-  for (const forcedRequest of forcedResolutions.keys()) {
-    if (request.startsWith(forcedRequest + "/")) {
-      return rootRequire.resolve(request);
-    }
+  if (typeof request === "string" && shouldForcePackageResolution(request)) {
+    return originalResolveFilename.call(this, request, rootParent, false, options);
   }
   return originalResolveFilename.call(this, request, parent, isMain, options);
 };
@@ -732,21 +720,58 @@ function renderHtml(model) {
   });
 }
 
+function createReadableStreamFromString(value) {
+  const encoder = new TextEncoder();
+
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(value));
+      controller.close();
+    }
+  });
+}
+
+async function renderHtmlFromFlightData(flightData, moduleMap) {
+  const model = await createFromReadableStream(createReadableStreamFromString(flightData), {
+    serverConsumerManifest: {
+      moduleMap: moduleMap || {},
+      serverModuleMap: null,
+      moduleLoading: null
+    }
+  });
+
+  return renderHtml(model);
+}
+
 process.on("message", async (message) => {
-  if (!message || message.type !== "render") {
+  if (!message || (message.type !== "render-route" && message.type !== "render-flight")) {
     return;
   }
 
-  const previousBasename = globalThis.__RSC_BASENAME;
-  globalThis.__RSC_BASENAME = message.payload.basename || "";
-
   try {
-    const resolved = await router.resolve({
-      pathname: message.payload.pathname,
-      searchParams: message.payload.searchParams || {},
-      cookies: message.payload.cookies || {},
-    });
-    const html = await renderHtml(resolved.model);
+    let html = "";
+
+    if (message.type === "render-route") {
+      const previousBasename = globalThis.__RSC_BASENAME;
+      globalThis.__RSC_BASENAME = message.payload.basename || "";
+
+      try {
+        const resolved = await router.resolve({
+          pathname: message.payload.pathname,
+          searchParams: message.payload.searchParams || {},
+          cookies: message.payload.cookies || {},
+        });
+        html = await renderHtml(resolved.model);
+      } finally {
+        globalThis.__RSC_BASENAME = previousBasename;
+      }
+    } else {
+      html = await renderHtmlFromFlightData(
+        message.payload.flightData || "",
+        message.payload.moduleMap || {},
+      );
+    }
+
     if (typeof process.send === "function") {
       process.send({ id: message.id, ok: true, html });
     }
@@ -757,8 +782,6 @@ process.on("message", async (message) => {
     if (typeof process.send === "function") {
       process.send({ id: message.id, ok: false, error: formatted });
     }
-  } finally {
-    globalThis.__RSC_BASENAME = previousBasename;
   }
 });
 `;
@@ -870,7 +893,35 @@ ${stderrBuffer.trim()}` : "";
         pending.set(requestId, { resolve, reject, timeout });
         const request = {
           id: requestId,
-          type: "render",
+          type: "render-route",
+          payload
+        };
+        activeChild.send(request, (error) => {
+          if (!error) {
+            return;
+          }
+          const entry = pending.get(requestId);
+          if (!entry) {
+            return;
+          }
+          pending.delete(requestId);
+          clearTimeout(entry.timeout);
+          entry.reject(error instanceof Error ? error : new Error(String(error)));
+        });
+      });
+    },
+    renderFromFlightData(payload) {
+      const activeChild = startWorker();
+      const requestId = nextRequestId++;
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          rejectPending(new Error("[webframez-react] Initial HTML worker timed out"));
+          stopWorker();
+        }, 1e4);
+        pending.set(requestId, { resolve, reject, timeout });
+        const request = {
+          id: requestId,
+          type: "render-flight",
           payload
         };
         activeChild.send(request, (error) => {
@@ -1121,7 +1172,11 @@ function createNodeRequestHandler(options) {
       } catch (retryError) {
         console.error("[webframez-react] Retry for initial HTML failed", retryError);
         try {
-          rootHtml = await renderHtmlFromFlightData(initialFlightData, { moduleMap });
+          initialHtmlWorker.dispose();
+          rootHtml = await initialHtmlWorker.renderFromFlightData({
+            flightData: initialFlightData,
+            moduleMap
+          });
         } catch (flightRenderError) {
           console.error("[webframez-react] Flight-to-HTML render failed", flightRenderError);
           res.statusCode = 500;
