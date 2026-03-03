@@ -69,12 +69,20 @@ export type PageDataResolver<TData = unknown> = (
   context: RouteContext,
 ) => TData | Promise<TData>;
 
+export type RouteMiddlewareResult = Record<string, unknown> | undefined | void;
+export type RouteMiddlewareResolver<TData = unknown> = (
+  context: RouteContext<TData>,
+) => RouteMiddlewareResult | Promise<RouteMiddlewareResult>;
+export type RouteMiddlewareRegistry = Record<string, RouteMiddlewareResolver<any>>;
+export type RouteMiddlewareConfig = string | string[];
+
 export type PageModule<TData = unknown> = {
   default: (
     props: PageProps<TData>,
   ) => React.ReactNode | Promise<React.ReactNode>;
   Head?: HeadResolver<PageProps<TData>>;
   Data?: PageDataResolver<TData>;
+  middlewares?: RouteMiddlewareConfig;
 };
 
 export type LayoutModule = {

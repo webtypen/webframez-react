@@ -12,6 +12,9 @@ import type {
   PageProps,
   PageModule,
   RouteContext,
+  RouteMiddlewareConfig,
+  RouteMiddlewareRegistry,
+  RouteMiddlewareResult,
   RouteParams,
   RouteSearchParams,
 } from "./types";
@@ -306,6 +309,7 @@ export function createFileRouter(options: { pagesDir: string }) {
   const pagesDir = options.pagesDir;
   const layoutPath = path.join(pagesDir, "layout.js");
   const errorPath = path.join(pagesDir, "errors.js");
+  const middlewaresPath = path.join(pagesDir, "middlewares.js");
 
   function buildRouteEntries() {
     const files = walkFiles(pagesDir);
@@ -376,6 +380,98 @@ export function createFileRouter(options: { pagesDir: string }) {
     };
   }
 
+  function normalizeMiddlewareNames(config?: RouteMiddlewareConfig) {
+    if (!config) {
+      return [];
+    }
+
+    return Array.isArray(config) ? config : [config];
+  }
+
+  function isPlainObject(value: unknown): value is Record<string, unknown> {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  }
+
+  function mergeRouteData(currentData: unknown, nextData: RouteMiddlewareResult | unknown) {
+    if (typeof nextData === "undefined") {
+      return currentData;
+    }
+
+    if (isPlainObject(currentData) && isPlainObject(nextData)) {
+      return {
+        ...currentData,
+        ...nextData,
+      };
+    }
+
+    return nextData;
+  }
+
+  async function resolveMiddlewares(
+    config: RouteMiddlewareConfig | undefined,
+    context: RouteContext,
+  ) {
+    const middlewareNames = normalizeMiddlewareNames(config);
+    const requiresNamedMiddleware = middlewareNames.length > 0;
+
+    if (!fs.existsSync(middlewaresPath)) {
+      if (!requiresNamedMiddleware) {
+        return context;
+      }
+
+      throw createAbort({
+        status: 500,
+        message: `Invalid middleware '${middlewareNames[0]}'`,
+      });
+    }
+
+    const middlewareModule = resolveModule<{ middlewares?: RouteMiddlewareRegistry }>(middlewaresPath);
+    const registry = middlewareModule.middlewares;
+    if (!registry) {
+      if (!requiresNamedMiddleware) {
+        return context;
+      }
+
+      throw createAbort({
+        status: 500,
+        message: `Invalid middleware '${middlewareNames[0]}'`,
+      });
+    }
+
+    const orderedMiddlewareNames =
+      typeof registry["*"] === "function"
+        ? ["*", ...middlewareNames]
+        : middlewareNames;
+
+    if (orderedMiddlewareNames.length === 0) {
+      return context;
+    }
+
+    let nextContext: RouteContext = context;
+    for (const middlewareName of orderedMiddlewareNames) {
+      const middleware = registry[middlewareName];
+      if (typeof middleware !== "function") {
+        throw createAbort({
+          status: 500,
+          message: `Invalid middleware '${middlewareName}'`,
+        });
+      }
+
+      const middlewareData = await middleware(nextContext);
+      nextContext = {
+        ...nextContext,
+        data: mergeRouteData(nextContext.data, middlewareData),
+      };
+    }
+
+    return nextContext;
+  }
+
   async function resolve(input: ResolveInput): Promise<ResolvedRoute> {
     const pathname = normalizePathname(input.pathname);
     const contextBase: RouteContext = {
@@ -407,11 +503,13 @@ export function createFileRouter(options: { pagesDir: string }) {
       const layoutModule = fs.existsSync(layoutPath)
         ? resolveModule<LayoutModule>(layoutPath)
         : null;
+      const middlewareContext = await resolveMiddlewares(pageModule.middlewares, context);
+      activeContext = middlewareContext;
 
-      const pageData = await resolvePageData(pageModule, context);
+      const pageData = await resolvePageData(pageModule, middlewareContext);
       const pageContext: PageProps = {
-        ...context,
-        data: pageData,
+        ...middlewareContext,
+        data: mergeRouteData(middlewareContext.data, pageData),
       };
       activeContext = pageContext;
 

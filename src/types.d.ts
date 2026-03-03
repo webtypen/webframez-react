@@ -69,10 +69,18 @@ export type PageDataResolver<TData = unknown> = (
   context: RouteContext
 ) => TData | Promise<TData>;
 
+export type RouteMiddlewareResult = Record<string, unknown> | undefined | void;
+export type RouteMiddlewareResolver<TData = unknown> = (
+  context: RouteContext<TData>
+) => RouteMiddlewareResult | Promise<RouteMiddlewareResult>;
+export type RouteMiddlewareRegistry = Record<string, RouteMiddlewareResolver<any>>;
+export type RouteMiddlewareConfig = string | string[];
+
 export type PageModule<TData = unknown> = {
   default: (props: PageProps<TData>) => ReactNode | Promise<ReactNode>;
   Head?: HeadResolver<PageProps<TData>>;
   Data?: PageDataResolver<TData>;
+  middlewares?: RouteMiddlewareConfig;
 };
 
 export type LayoutModule = {
@@ -91,6 +99,8 @@ export type CreateHtmlShellOptions = {
   clientScriptUrl?: string;
   headTags?: string;
   rootHtml?: string;
+  initialFlightData?: string;
+  clientRenderMode?: "hydrate" | "mount";
   basename?: string;
   liveReloadPath?: string;
   liveReloadServerId?: string;

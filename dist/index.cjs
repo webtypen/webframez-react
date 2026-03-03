@@ -462,6 +462,7 @@ function createFileRouter(options) {
   const pagesDir = options.pagesDir;
   const layoutPath = import_node_path2.default.join(pagesDir, "layout.js");
   const errorPath = import_node_path2.default.join(pagesDir, "errors.js");
+  const middlewaresPath = import_node_path2.default.join(pagesDir, "middlewares.js");
   function buildRouteEntries() {
     const files = walkFiles(pagesDir);
     return files.map((filePath) => toRouteEntry(pagesDir, filePath)).filter((entry) => entry !== null).sort((a, b) => {
@@ -504,6 +505,75 @@ function createFileRouter(options) {
       head: mergeHead(layoutHead, errorHead)
     };
   }
+  function normalizeMiddlewareNames(config) {
+    if (!config) {
+      return [];
+    }
+    return Array.isArray(config) ? config : [config];
+  }
+  function isPlainObject(value) {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  }
+  function mergeRouteData(currentData, nextData) {
+    if (typeof nextData === "undefined") {
+      return currentData;
+    }
+    if (isPlainObject(currentData) && isPlainObject(nextData)) {
+      return {
+        ...currentData,
+        ...nextData
+      };
+    }
+    return nextData;
+  }
+  async function resolveMiddlewares(config, context) {
+    const middlewareNames = normalizeMiddlewareNames(config);
+    const requiresNamedMiddleware = middlewareNames.length > 0;
+    if (!import_node_fs.default.existsSync(middlewaresPath)) {
+      if (!requiresNamedMiddleware) {
+        return context;
+      }
+      throw createAbort({
+        status: 500,
+        message: `Invalid middleware '${middlewareNames[0]}'`
+      });
+    }
+    const middlewareModule = resolveModule(middlewaresPath);
+    const registry = middlewareModule.middlewares;
+    if (!registry) {
+      if (!requiresNamedMiddleware) {
+        return context;
+      }
+      throw createAbort({
+        status: 500,
+        message: `Invalid middleware '${middlewareNames[0]}'`
+      });
+    }
+    const orderedMiddlewareNames = typeof registry["*"] === "function" ? ["*", ...middlewareNames] : middlewareNames;
+    if (orderedMiddlewareNames.length === 0) {
+      return context;
+    }
+    let nextContext = context;
+    for (const middlewareName of orderedMiddlewareNames) {
+      const middleware = registry[middlewareName];
+      if (typeof middleware !== "function") {
+        throw createAbort({
+          status: 500,
+          message: `Invalid middleware '${middlewareName}'`
+        });
+      }
+      const middlewareData = await middleware(nextContext);
+      nextContext = {
+        ...nextContext,
+        data: mergeRouteData(nextContext.data, middlewareData)
+      };
+    }
+    return nextContext;
+  }
   async function resolve(input) {
     const pathname = normalizePathname(input.pathname);
     const contextBase = {
@@ -529,10 +599,12 @@ function createFileRouter(options) {
       activeContext = context;
       const pageModule = resolveModule(match.entry.filePath);
       const layoutModule = import_node_fs.default.existsSync(layoutPath) ? resolveModule(layoutPath) : null;
-      const pageData = await resolvePageData(pageModule, context);
+      const middlewareContext = await resolveMiddlewares(pageModule.middlewares, context);
+      activeContext = middlewareContext;
+      const pageData = await resolvePageData(pageModule, middlewareContext);
       const pageContext = {
-        ...context,
-        data: pageData
+        ...middlewareContext,
+        data: mergeRouteData(middlewareContext.data, pageData)
       };
       activeContext = pageContext;
       const pageNode = await pageModule.default(pageContext);
