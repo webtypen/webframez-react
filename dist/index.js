@@ -678,6 +678,20 @@ const reactDomPkg = require.resolve("react-dom/package.json", {
   paths: [process.cwd()]
 });
 const reactDomServer = require(path.join(path.dirname(reactDomPkg), "server.node.js"));
+globalThis.__webpack_chunk_load__ = function __webframezNoopChunkLoad() {
+  return Promise.resolve();
+};
+globalThis.__webpack_require__ = function __webframezNodeRequire(id) {
+  if (typeof id !== "string") {
+    return require(id);
+  }
+
+  if (id.startsWith("./")) {
+    return require(path.resolve(process.cwd(), id.slice(2)));
+  }
+
+  return require(id);
+};
 
 function renderHtml(model) {
   return new Promise((resolve, reject) => {
@@ -988,7 +1002,7 @@ function createServerConsumerManifest(manifest) {
     consumerManifest[key] = {
       "*": {
         id: entry.id,
-        chunks: Array.isArray(entry.chunks) ? entry.chunks : [],
+        chunks: [],
         name: entry.name ?? "*",
         ...entry.async ? { async: entry.async } : {}
       }

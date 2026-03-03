@@ -131,6 +131,22 @@ export async function renderHtmlFromFlightData(
   options: Pick<SendRSCOptions, "moduleMap">
 ) {
   const appRequire = createRequire(path.join(process.cwd(), "__webframez_react_server__.js"));
+  const target = globalThis as typeof globalThis & {
+    __webpack_chunk_load__?: (id: unknown) => Promise<void>;
+    __webpack_require__?: (id: unknown) => unknown;
+  };
+  target.__webpack_chunk_load__ = () => Promise.resolve();
+  target.__webpack_require__ = (id: unknown) => {
+    if (typeof id !== "string") {
+      return appRequire(id as never);
+    }
+
+    if (id.startsWith("./")) {
+      return appRequire(path.resolve(process.cwd(), id.slice(2)));
+    }
+
+    return appRequire(id);
+  };
   const reactDomPkg = appRequire.resolve("react-dom/package.json");
   const { renderToString } = appRequire(path.join(path.dirname(reactDomPkg), "server.node.js")) as {
     renderToString: (model: unknown) => string;
