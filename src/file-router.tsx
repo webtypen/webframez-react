@@ -316,8 +316,29 @@ export function renderHeadToString(head: HeadConfig) {
   return tags.join("\n");
 }
 
-function resolveModule<T>(modulePath: string): T {
-  delete require.cache[modulePath];
+function clearModuleCache(modulePath: string, rootDir: string, visited = new Set<string>()) {
+  const resolvedPath = require.resolve(modulePath);
+  if (visited.has(resolvedPath)) {
+    return;
+  }
+
+  visited.add(resolvedPath);
+  const cachedModule = require.cache[resolvedPath];
+  if (!cachedModule) {
+    return;
+  }
+
+  for (const child of cachedModule.children) {
+    if (child.id.startsWith(rootDir)) {
+      clearModuleCache(child.id, rootDir, visited);
+    }
+  }
+
+  delete require.cache[resolvedPath];
+}
+
+function resolveModule<T>(modulePath: string, rootDir: string): T {
+  clearModuleCache(modulePath, rootDir);
   return require(modulePath) as T;
 }
 
@@ -438,7 +459,7 @@ export function createFileRouter(options: { pagesDir: string }) {
     };
 
     const layoutModule = fs.existsSync(layoutPath)
-      ? resolveModule<LayoutModule>(layoutPath)
+      ? resolveModule<LayoutModule>(layoutPath, pagesDir)
       : null;
 
     if (!fs.existsSync(errorPath)) {
@@ -458,7 +479,7 @@ export function createFileRouter(options: { pagesDir: string }) {
       };
     }
 
-    const errorModule = resolveModule<ErrorModule>(errorPath);
+    const errorModule = resolveModule<ErrorModule>(errorPath, pagesDir);
     const errorNode = await errorModule.default(errorProps);
 
     const layoutHead = layoutModule
@@ -530,7 +551,10 @@ export function createFileRouter(options: { pagesDir: string }) {
       });
     }
 
-    const middlewareModule = resolveModule<{ middlewares?: RouteMiddlewareRegistry }>(middlewaresPath);
+    const middlewareModule = resolveModule<{ middlewares?: RouteMiddlewareRegistry }>(
+      middlewaresPath,
+      pagesDir,
+    );
     const registry = middlewareModule.middlewares;
     if (!registry) {
       if (!requiresNamedMiddleware) {
@@ -599,9 +623,9 @@ export function createFileRouter(options: { pagesDir: string }) {
       };
       activeContext = context;
 
-      const pageModule = resolveModule<PageModule>(match.entry.filePath);
+      const pageModule = resolveModule<PageModule>(match.entry.filePath, pagesDir);
       const layoutModule = fs.existsSync(layoutPath)
-        ? resolveModule<LayoutModule>(layoutPath)
+        ? resolveModule<LayoutModule>(layoutPath, pagesDir)
         : null;
       const middlewareContext = await resolveMiddlewares(pageModule.middlewares, context);
       activeContext = middlewareContext;

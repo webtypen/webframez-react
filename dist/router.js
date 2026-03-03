@@ -270,8 +270,25 @@ function renderHeadToString(head) {
   }
   return tags.join("\n");
 }
-function resolveModule(modulePath) {
-  delete __require.cache[modulePath];
+function clearModuleCache(modulePath, rootDir, visited = /* @__PURE__ */ new Set()) {
+  const resolvedPath = __require.resolve(modulePath);
+  if (visited.has(resolvedPath)) {
+    return;
+  }
+  visited.add(resolvedPath);
+  const cachedModule = __require.cache[resolvedPath];
+  if (!cachedModule) {
+    return;
+  }
+  for (const child of cachedModule.children) {
+    if (child.id.startsWith(rootDir)) {
+      clearModuleCache(child.id, rootDir, visited);
+    }
+  }
+  delete __require.cache[resolvedPath];
+}
+function resolveModule(modulePath, rootDir) {
+  clearModuleCache(modulePath, rootDir);
   return __require(modulePath);
 }
 async function resolveHead(candidate, context) {
@@ -358,7 +375,7 @@ function createFileRouter(options) {
       message,
       payload
     };
-    const layoutModule = fs.existsSync(layoutPath) ? resolveModule(layoutPath) : null;
+    const layoutModule = fs.existsSync(layoutPath) ? resolveModule(layoutPath, pagesDir) : null;
     if (!fs.existsSync(errorPath)) {
       const fallback = /* @__PURE__ */ jsxs("main", { style: { fontFamily: "system-ui, sans-serif", padding: 24 }, children: [
         /* @__PURE__ */ jsx("h1", { children: statusCode }),
@@ -372,7 +389,7 @@ function createFileRouter(options) {
         }
       };
     }
-    const errorModule = resolveModule(errorPath);
+    const errorModule = resolveModule(errorPath, pagesDir);
     const errorNode = await errorModule.default(errorProps);
     const layoutHead = layoutModule ? await resolveHead(layoutModule, context) : void 0;
     const errorHead = await resolveHead(errorModule, errorProps);
@@ -421,7 +438,10 @@ function createFileRouter(options) {
         message: `Invalid middleware '${middlewareNames[0]}'`
       });
     }
-    const middlewareModule = resolveModule(middlewaresPath);
+    const middlewareModule = resolveModule(
+      middlewaresPath,
+      pagesDir
+    );
     const registry = middlewareModule.middlewares;
     if (!registry) {
       if (!requiresNamedMiddleware) {
@@ -476,8 +496,8 @@ function createFileRouter(options) {
         params: match.params
       };
       activeContext = context;
-      const pageModule = resolveModule(match.entry.filePath);
-      const layoutModule = fs.existsSync(layoutPath) ? resolveModule(layoutPath) : null;
+      const pageModule = resolveModule(match.entry.filePath, pagesDir);
+      const layoutModule = fs.existsSync(layoutPath) ? resolveModule(layoutPath, pagesDir) : null;
       const middlewareContext = await resolveMiddlewares(pageModule.middlewares, context);
       activeContext = middlewareContext;
       const pageData = await resolvePageData(pageModule, middlewareContext);
