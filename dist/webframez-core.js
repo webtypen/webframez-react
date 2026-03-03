@@ -611,11 +611,6 @@ const Module = require("node:module");
 const { Writable } = require("node:stream");
 const { createFromReadableStream } = require("react-server-dom-webpack/client.node");
 
-const pagesDir = process.env.WEBFRAMEZ_REACT_PAGES_DIR || "";
-if (!pagesDir) {
-  throw new Error("Missing WEBFRAMEZ_REACT_PAGES_DIR");
-}
-
 const originalResolveFilename = Module._resolveFilename;
 const rootParent = {
   id: "__webframez_react_worker__",
@@ -653,12 +648,10 @@ Module._resolveFilename = function(request, parent, isMain, options) {
   return originalResolveFilename.call(this, request, parent, isMain, options);
 };
 
-const { createFileRouter } = require("@webtypen/webframez-react/router");
 const reactDomPkg = require.resolve("react-dom/package.json", {
-  paths: [process.cwd(), pagesDir]
+  paths: [process.cwd()]
 });
 const reactDomServer = require(path.join(path.dirname(reactDomPkg), "server.node.js"));
-const router = createFileRouter({ pagesDir });
 
 function renderHtml(model) {
   return new Promise((resolve, reject) => {
@@ -719,33 +712,15 @@ async function renderHtmlFromFlightData(flightData, moduleMap) {
 }
 
 process.on("message", async (message) => {
-  if (!message || (message.type !== "render-route" && message.type !== "render-flight")) {
+  if (!message || message.type !== "render-flight") {
     return;
   }
 
   try {
-    let html = "";
-
-    if (message.type === "render-route") {
-      const previousBasename = globalThis.__RSC_BASENAME;
-      globalThis.__RSC_BASENAME = message.payload.basename || "";
-
-      try {
-        const resolved = await router.resolve({
-          pathname: message.payload.pathname,
-          searchParams: message.payload.searchParams || {},
-          cookies: message.payload.cookies || {},
-        });
-        html = await renderHtml(resolved.model);
-      } finally {
-        globalThis.__RSC_BASENAME = previousBasename;
-      }
-    } else {
-      html = await renderHtmlFromFlightData(
-        message.payload.flightData || "",
-        message.payload.moduleMap || {},
-      );
-    }
+    const html = await renderHtmlFromFlightData(
+      message.payload.flightData || "",
+      message.payload.moduleMap || {},
+    );
 
     if (typeof process.send === "function") {
       process.send({ id: message.id, ok: true, html });
@@ -785,7 +760,7 @@ function sanitizeInitialHtmlWorkerNodeOptions(rawNodeOptions) {
   }
   return rawNodeOptions.replace(/(^|\s)--conditions\s+react-server(?=\s|$)/g, " ").replace(/(^|\s)-r\s+(\S*webframez-react\/register)(?=\s|$)/g, " ").replace(/\s+/g, " ").trim();
 }
-function createInitialHtmlWorker(pagesDir) {
+function createInitialHtmlWorker(_pagesDir) {
   let child = null;
   let nextRequestId = 1;
   let stderrBuffer = "";
@@ -816,8 +791,7 @@ function createInitialHtmlWorker(pagesDir) {
       cwd: process.cwd(),
       env: {
         ...process.env,
-        NODE_OPTIONS: sanitizeInitialHtmlWorkerNodeOptions(process.env.NODE_OPTIONS),
-        WEBFRAMEZ_REACT_PAGES_DIR: pagesDir
+        NODE_OPTIONS: sanitizeInitialHtmlWorkerNodeOptions(process.env.NODE_OPTIONS)
       },
       stdio: ["ignore", "ignore", "pipe", "ipc"]
     });
@@ -857,34 +831,6 @@ ${stderrBuffer.trim()}` : "";
     return child;
   };
   return {
-    render(payload) {
-      const activeChild = startWorker();
-      const requestId = nextRequestId++;
-      return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          rejectPending(new Error("[webframez-react] Initial HTML worker timed out"));
-          stopWorker();
-        }, 1e4);
-        pending.set(requestId, { resolve, reject, timeout });
-        const request = {
-          id: requestId,
-          type: "render-route",
-          payload
-        };
-        activeChild.send(request, (error) => {
-          if (!error) {
-            return;
-          }
-          const entry = pending.get(requestId);
-          if (!entry) {
-            return;
-          }
-          pending.delete(requestId);
-          clearTimeout(entry.timeout);
-          entry.reject(error instanceof Error ? error : new Error(String(error)));
-        });
-      });
-    },
     renderFromFlightData(payload) {
       const activeChild = startWorker();
       const requestId = nextRequestId++;
@@ -1128,21 +1074,17 @@ function createNodeRequestHandler(options) {
     });
     let rootHtml = "";
     try {
-      rootHtml = await initialHtmlWorker.render({
-        pathname: stripBasePath(url.pathname, basePath),
-        searchParams: parseSearchParams(url.searchParams),
-        cookies: requestCookies,
-        basename: basePath
+      rootHtml = await initialHtmlWorker.renderFromFlightData({
+        flightData: initialFlightData,
+        moduleMap
       });
     } catch (error) {
       console.error("[webframez-react] Failed to render initial HTML", error);
       try {
         initialHtmlWorker.dispose();
-        rootHtml = await initialHtmlWorker.render({
-          pathname: stripBasePath(url.pathname, basePath),
-          searchParams: parseSearchParams(url.searchParams),
-          cookies: requestCookies,
-          basename: basePath
+        rootHtml = await initialHtmlWorker.renderFromFlightData({
+          flightData: initialFlightData,
+          moduleMap
         });
       } catch (retryError) {
         console.error("[webframez-react] Retry for initial HTML failed", retryError);
