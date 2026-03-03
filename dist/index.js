@@ -975,6 +975,27 @@ function normalizeClientManifest(manifest, options) {
   }
   return normalized;
 }
+function createServerConsumerManifest(manifest) {
+  const consumerManifest = {};
+  for (const [key, value] of Object.entries(manifest)) {
+    if (!value || typeof value !== "object") {
+      continue;
+    }
+    const entry = value;
+    if (typeof entry.id !== "string" || entry.id.trim() === "") {
+      continue;
+    }
+    consumerManifest[key] = {
+      "*": {
+        id: entry.id,
+        chunks: Array.isArray(entry.chunks) ? entry.chunks : [],
+        name: entry.name ?? "*",
+        ...entry.async ? { async: entry.async } : {}
+      }
+    };
+  }
+  return consumerManifest;
+}
 function createNodeRequestHandler(options) {
   const devServerId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const distRootDir = path3.resolve(options.distRootDir);
@@ -999,6 +1020,7 @@ function createNodeRequestHandler(options) {
       cwd: process.cwd()
     }
   );
+  const serverConsumerModuleMap = createServerConsumerManifest(moduleMap);
   const initialHtmlWorker = createInitialHtmlWorker(pagesDir);
   const disposeInitialHtmlWorker = () => {
     initialHtmlWorker.dispose();
@@ -1114,7 +1136,7 @@ function createNodeRequestHandler(options) {
     try {
       rootHtml = await initialHtmlWorker.renderFromFlightData({
         flightData: initialFlightData,
-        moduleMap
+        moduleMap: serverConsumerModuleMap
       });
     } catch (error) {
       console.error("[webframez-react] Failed to render initial HTML", error);
@@ -1122,7 +1144,7 @@ function createNodeRequestHandler(options) {
         initialHtmlWorker.dispose();
         rootHtml = await initialHtmlWorker.renderFromFlightData({
           flightData: initialFlightData,
-          moduleMap
+          moduleMap: serverConsumerModuleMap
         });
       } catch (retryError) {
         console.error("[webframez-react] Retry for initial HTML failed", retryError);
@@ -1130,7 +1152,7 @@ function createNodeRequestHandler(options) {
           initialHtmlWorker.dispose();
           rootHtml = await initialHtmlWorker.renderFromFlightData({
             flightData: initialFlightData,
-            moduleMap
+            moduleMap: serverConsumerModuleMap
           });
         } catch (flightRenderError) {
           console.error("[webframez-react] Flight-to-HTML render failed", flightRenderError);
