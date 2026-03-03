@@ -565,6 +565,7 @@ function parseSearchParams(query) {
 // src/http.ts
 var import_node_fs2 = __toESM(require("node:fs"), 1);
 var import_node_path3 = __toESM(require("node:path"), 1);
+var import_node_url = require("node:url");
 var import_node_child_process = require("node:child_process");
 function createInitialHtmlErrorMarkup(message) {
   return `<main style="font-family:system-ui,sans-serif;padding:24px"><h1 style="margin:0 0 12px">500</h1><p style="margin:0">${message}</p></main>`;
@@ -838,6 +839,38 @@ function parseCookies(rawCookieHeader) {
   }
   return output;
 }
+function normalizeClientManifest(manifest, options) {
+  const normalized = { ...manifest };
+  const candidateNodeModulesDirs = /* @__PURE__ */ new Set([
+    import_node_path3.default.resolve(options.cwd, "node_modules"),
+    import_node_path3.default.resolve(options.distRootDir, "..", "..", "node_modules")
+  ]);
+  for (const [key, value] of Object.entries(manifest)) {
+    if (!key.startsWith("file://")) {
+      continue;
+    }
+    let absolutePath = "";
+    try {
+      absolutePath = (0, import_node_url.fileURLToPath)(key);
+    } catch {
+      continue;
+    }
+    const marker = `${import_node_path3.default.sep}node_modules${import_node_path3.default.sep}`;
+    const markerIndex = absolutePath.lastIndexOf(marker);
+    if (markerIndex < 0) {
+      continue;
+    }
+    const relativeModulePath = absolutePath.slice(markerIndex + marker.length);
+    for (const nodeModulesDir of candidateNodeModulesDirs) {
+      const aliasPath = import_node_path3.default.join(nodeModulesDir, relativeModulePath);
+      const aliasKey = (0, import_node_url.pathToFileURL)(aliasPath).href;
+      if (!(aliasKey in normalized)) {
+        normalized[aliasKey] = value;
+      }
+    }
+  }
+  return normalized;
+}
 function createNodeRequestHandler(options) {
   const devServerId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const distRootDir = import_node_path3.default.resolve(options.distRootDir);
@@ -855,7 +888,13 @@ function createNodeRequestHandler(options) {
   const liveReloadPath = !liveReloadEnabled ? "" : options.liveReloadPath ?? `${basePath || ""}/__webframez_live_reload`;
   const liveReloadClients = /* @__PURE__ */ new Set();
   const router = createFileRouter({ pagesDir });
-  const moduleMap = JSON.parse(import_node_fs2.default.readFileSync(manifestPath, "utf-8"));
+  const moduleMap = normalizeClientManifest(
+    JSON.parse(import_node_fs2.default.readFileSync(manifestPath, "utf-8")),
+    {
+      distRootDir,
+      cwd: process.cwd()
+    }
+  );
   const initialHtmlWorker = createInitialHtmlWorker(pagesDir);
   const disposeInitialHtmlWorker = () => {
     initialHtmlWorker.dispose();

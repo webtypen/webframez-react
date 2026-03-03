@@ -9,6 +9,7 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
 // src/http.ts
 import fs2 from "node:fs";
 import path3 from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 
 // src/server.ts
@@ -776,6 +777,38 @@ function parseCookies(rawCookieHeader) {
   }
   return output;
 }
+function normalizeClientManifest(manifest, options) {
+  const normalized = { ...manifest };
+  const candidateNodeModulesDirs = /* @__PURE__ */ new Set([
+    path3.resolve(options.cwd, "node_modules"),
+    path3.resolve(options.distRootDir, "..", "..", "node_modules")
+  ]);
+  for (const [key, value] of Object.entries(manifest)) {
+    if (!key.startsWith("file://")) {
+      continue;
+    }
+    let absolutePath = "";
+    try {
+      absolutePath = fileURLToPath(key);
+    } catch {
+      continue;
+    }
+    const marker = `${path3.sep}node_modules${path3.sep}`;
+    const markerIndex = absolutePath.lastIndexOf(marker);
+    if (markerIndex < 0) {
+      continue;
+    }
+    const relativeModulePath = absolutePath.slice(markerIndex + marker.length);
+    for (const nodeModulesDir of candidateNodeModulesDirs) {
+      const aliasPath = path3.join(nodeModulesDir, relativeModulePath);
+      const aliasKey = pathToFileURL(aliasPath).href;
+      if (!(aliasKey in normalized)) {
+        normalized[aliasKey] = value;
+      }
+    }
+  }
+  return normalized;
+}
 function createNodeRequestHandler(options) {
   const devServerId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const distRootDir = path3.resolve(options.distRootDir);
@@ -793,7 +826,13 @@ function createNodeRequestHandler(options) {
   const liveReloadPath = !liveReloadEnabled ? "" : options.liveReloadPath ?? `${basePath || ""}/__webframez_live_reload`;
   const liveReloadClients = /* @__PURE__ */ new Set();
   const router = createFileRouter({ pagesDir });
-  const moduleMap = JSON.parse(fs2.readFileSync(manifestPath, "utf-8"));
+  const moduleMap = normalizeClientManifest(
+    JSON.parse(fs2.readFileSync(manifestPath, "utf-8")),
+    {
+      distRootDir,
+      cwd: process.cwd()
+    }
+  );
   const initialHtmlWorker = createInitialHtmlWorker(pagesDir);
   const disposeInitialHtmlWorker = () => {
     initialHtmlWorker.dispose();
