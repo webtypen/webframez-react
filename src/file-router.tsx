@@ -24,6 +24,7 @@ type RouteEntry = {
   filePath: string;
   segments: string[];
   staticCount: number;
+  catchAllCount: number;
 };
 
 type ResolveInput = {
@@ -188,25 +189,46 @@ function toRouteEntry(pagesDir: string, filePath: string): RouteEntry | null {
     .replace(/\\/g, "/");
   const segments = relativeDir === "." ? [] : relativeDir.split("/").filter(Boolean);
   const staticCount = segments.filter((segment) => !segment.startsWith("[")).length;
+  const catchAllCount = segments.filter(
+    (segment) => segment.startsWith("[...") && segment.endsWith("]"),
+  ).length;
 
   return {
     filePath,
     segments,
     staticCount,
+    catchAllCount,
   };
 }
 
 function matchRoute(entry: RouteEntry, pathname: string): RouteParams | null {
   const targetSegments = splitSegments(pathname);
-  if (entry.segments.length !== targetSegments.length) {
-    return null;
-  }
-
   const params: RouteParams = {};
 
   for (let index = 0; index < entry.segments.length; index += 1) {
     const routeSegment = entry.segments[index];
+    const isCatchAll =
+      routeSegment.startsWith("[...") && routeSegment.endsWith("]");
+
+    if (isCatchAll) {
+      const paramName = routeSegment.slice(4, -1);
+      if (!paramName || index !== entry.segments.length - 1) {
+        return null;
+      }
+
+      const restSegments = targetSegments.slice(index);
+      if (restSegments.length === 0) {
+        return null;
+      }
+
+      params[paramName] = restSegments.map((segment) => decodeURIComponent(segment));
+      return params;
+    }
+
     const targetSegment = targetSegments[index];
+    if (typeof targetSegment !== "string") {
+      return null;
+    }
 
     if (routeSegment.startsWith("[") && routeSegment.endsWith("]")) {
       const paramName = routeSegment.slice(1, -1);
@@ -220,6 +242,10 @@ function matchRoute(entry: RouteEntry, pathname: string): RouteParams | null {
     if (routeSegment !== targetSegment) {
       return null;
     }
+  }
+
+  if (entry.segments.length !== targetSegments.length) {
+    return null;
   }
 
   return params;
@@ -331,6 +357,9 @@ function findBestMatch(entries: RouteEntry[], pathname: string) {
     if (b.entry.staticCount !== a.entry.staticCount) {
       return b.entry.staticCount - a.entry.staticCount;
     }
+    if (a.entry.catchAllCount !== b.entry.catchAllCount) {
+      return a.entry.catchAllCount - b.entry.catchAllCount;
+    }
     return b.entry.segments.length - a.entry.segments.length;
   });
 
@@ -387,6 +416,9 @@ export function createFileRouter(options: { pagesDir: string }) {
       .sort((a, b) => {
         if (b.staticCount !== a.staticCount) {
           return b.staticCount - a.staticCount;
+        }
+        if (a.catchAllCount !== b.catchAllCount) {
+          return a.catchAllCount - b.catchAllCount;
         }
         return b.segments.length - a.segments.length;
       });

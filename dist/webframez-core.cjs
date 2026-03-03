@@ -314,21 +314,38 @@ function toRouteEntry(pagesDir, filePath) {
   const relativeDir = import_node_path2.default.dirname(import_node_path2.default.relative(pagesDir, filePath)).replace(/\\/g, "/");
   const segments = relativeDir === "." ? [] : relativeDir.split("/").filter(Boolean);
   const staticCount = segments.filter((segment) => !segment.startsWith("[")).length;
+  const catchAllCount = segments.filter(
+    (segment) => segment.startsWith("[...") && segment.endsWith("]")
+  ).length;
   return {
     filePath,
     segments,
-    staticCount
+    staticCount,
+    catchAllCount
   };
 }
 function matchRoute(entry, pathname) {
   const targetSegments = splitSegments(pathname);
-  if (entry.segments.length !== targetSegments.length) {
-    return null;
-  }
   const params = {};
   for (let index = 0; index < entry.segments.length; index += 1) {
     const routeSegment = entry.segments[index];
+    const isCatchAll = routeSegment.startsWith("[...") && routeSegment.endsWith("]");
+    if (isCatchAll) {
+      const paramName = routeSegment.slice(4, -1);
+      if (!paramName || index !== entry.segments.length - 1) {
+        return null;
+      }
+      const restSegments = targetSegments.slice(index);
+      if (restSegments.length === 0) {
+        return null;
+      }
+      params[paramName] = restSegments.map((segment) => decodeURIComponent(segment));
+      return params;
+    }
     const targetSegment = targetSegments[index];
+    if (typeof targetSegment !== "string") {
+      return null;
+    }
     if (routeSegment.startsWith("[") && routeSegment.endsWith("]")) {
       const paramName = routeSegment.slice(1, -1);
       if (!paramName) {
@@ -340,6 +357,9 @@ function matchRoute(entry, pathname) {
     if (routeSegment !== targetSegment) {
       return null;
     }
+  }
+  if (entry.segments.length !== targetSegments.length) {
+    return null;
   }
   return params;
 }
@@ -420,6 +440,9 @@ function findBestMatch(entries, pathname) {
     if (b.entry.staticCount !== a.entry.staticCount) {
       return b.entry.staticCount - a.entry.staticCount;
     }
+    if (a.entry.catchAllCount !== b.entry.catchAllCount) {
+      return a.entry.catchAllCount - b.entry.catchAllCount;
+    }
     return b.entry.segments.length - a.entry.segments.length;
   });
   return matches[0] ?? null;
@@ -463,6 +486,9 @@ function createFileRouter(options) {
     return files.map((filePath) => toRouteEntry(pagesDir, filePath)).filter((entry) => entry !== null).sort((a, b) => {
       if (b.staticCount !== a.staticCount) {
         return b.staticCount - a.staticCount;
+      }
+      if (a.catchAllCount !== b.catchAllCount) {
+        return a.catchAllCount - b.catchAllCount;
       }
       return b.segments.length - a.segments.length;
     });

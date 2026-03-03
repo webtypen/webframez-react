@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type RouteParams = Record<string, string>;
+export type RouteParams = Record<string, string | string[]>;
 export type RouteSearchParams = Record<string, string | string[]>;
 
 export type AbortRouteOptions = {
