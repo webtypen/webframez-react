@@ -85,34 +85,39 @@ export type LinkProps = Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "hre
 
 export function Link({ to, basename, onClick, ...rest }: LinkProps) {
   const resolvedHref = resolveHref(to, basename ?? getDefaultBasename());
+  const isServerRender = typeof window === "undefined";
 
   return (
     <a
       {...rest}
       href={resolvedHref}
-      onClick={(event) => {
-        onClick?.(event);
-        if (event.defaultPrevented) {
-          return;
-        }
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-          return;
-        }
-        if (rest.target && rest.target !== "_self") {
-          return;
-        }
-        if (isExternal(resolvedHref)) {
-          return;
-        }
+      onClick={
+        isServerRender
+          ? undefined
+          : (event) => {
+              onClick?.(event);
+              if (event.defaultPrevented) {
+                return;
+              }
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                return;
+              }
+              if (rest.target && rest.target !== "_self") {
+                return;
+              }
+              if (isExternal(resolvedHref)) {
+                return;
+              }
 
-        const router = getClientRouter();
-        if (!router) {
-          return;
-        }
+              const router = getClientRouter();
+              if (!router) {
+                return;
+              }
 
-        event.preventDefault();
-        router.push(resolvedHref);
-      }}
+              event.preventDefault();
+              router.push(resolvedHref);
+            }
+      }
     />
   );
 }

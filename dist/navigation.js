@@ -57,12 +57,13 @@ function resolveHref(to, basename) {
 }
 function Link({ to, basename, onClick, ...rest }) {
   const resolvedHref = resolveHref(to, basename ?? getDefaultBasename());
+  const isServerRender = typeof window === "undefined";
   return /* @__PURE__ */ jsx(
     "a",
     {
       ...rest,
       href: resolvedHref,
-      onClick: (event) => {
+      onClick: isServerRender ? void 0 : (event) => {
         onClick?.(event);
         if (event.defaultPrevented) {
           return;
