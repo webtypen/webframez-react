@@ -735,7 +735,21 @@ globalThis.__webpack_require__ = function __webframezNodeRequire(id) {
   }
 
   if (id.startsWith("./")) {
-    return require(path.resolve(process.cwd(), id.slice(2)));
+    const relativeId = id.slice(2);
+    const candidates = [
+      path.resolve(process.cwd(), relativeId),
+      path.resolve(process.cwd(), "..", relativeId)
+    ];
+    for (const candidate of candidates) {
+      try {
+        return require(candidate);
+      } catch (error) {
+        const missingCandidate = error && error.code === "MODULE_NOT_FOUND" && typeof error.message === "string" && error.message.includes("'" + candidate + "'");
+        if (!missingCandidate) {
+          throw error;
+        }
+      }
+    }
   }
 
   return require(id);
@@ -1039,22 +1053,64 @@ function normalizeClientManifest(manifest, options) {
 }
 function createServerConsumerManifest(manifest) {
   const consumerManifest = {};
+  const normalizeWorkerModuleId = (requestKey, rawModuleId) => {
+    if (typeof rawModuleId === "string" && rawModuleId.trim() !== "") {
+      return rawModuleId;
+    }
+    if (typeof rawModuleId !== "number" || !Number.isFinite(rawModuleId)) {
+      return null;
+    }
+    if (!requestKey || requestKey.trim() === "") {
+      return String(rawModuleId);
+    }
+    if (requestKey.startsWith("file://")) {
+      try {
+        return (0, import_node_url.fileURLToPath)(requestKey);
+      } catch {
+        return String(rawModuleId);
+      }
+    }
+    if (requestKey.startsWith("/")) {
+      return requestKey;
+    }
+    if (requestKey.startsWith("./")) {
+      return requestKey;
+    }
+    if (requestKey.startsWith("node_modules/") || requestKey.startsWith("build/")) {
+      return `./${requestKey}`;
+    }
+    return requestKey;
+  };
+  const addReference = (lookupKey, reference) => {
+    if (!lookupKey || lookupKey.trim() === "") {
+      return;
+    }
+    if (lookupKey in consumerManifest) {
+      return;
+    }
+    consumerManifest[lookupKey] = {
+      "*": reference
+    };
+  };
   for (const [key, value] of Object.entries(manifest)) {
     if (!value || typeof value !== "object") {
       continue;
     }
     const entry = value;
-    if (typeof entry.id !== "string" || entry.id.trim() === "") {
+    const workerModuleId = normalizeWorkerModuleId(key, entry.id);
+    if (!workerModuleId) {
       continue;
     }
-    consumerManifest[key] = {
-      "*": {
-        id: entry.id,
-        chunks: [],
-        name: entry.name ?? "*",
-        ...entry.async ? { async: entry.async } : {}
-      }
+    const reference = {
+      id: workerModuleId,
+      chunks: Array.isArray(entry.chunks) ? entry.chunks : [],
+      name: entry.name ?? "*",
+      ...entry.async ? { async: entry.async } : {}
     };
+    addReference(key, reference);
+    if (typeof entry.id === "number" && Number.isFinite(entry.id)) {
+      addReference(String(entry.id), reference);
+    }
   }
   return consumerManifest;
 }

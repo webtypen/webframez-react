@@ -35,7 +35,7 @@ function createInitialHtmlErrorMarkup(message: string) {
 
 type InitialHtmlFlightPayload = {
   flightData: string;
-  moduleMap: Record<string, { "*": { id: string; chunks?: string[]; name?: string; async?: boolean } }>;
+  moduleMap: Record<string, { "*": { id: string | number; chunks?: Array<string | number>; name?: string; async?: boolean } }>;
 };
 
 type InitialHtmlWorkerRequest = {
@@ -112,7 +112,21 @@ globalThis.__webpack_require__ = function __webframezNodeRequire(id) {
   }
 
   if (id.startsWith("./")) {
-    return require(path.resolve(process.cwd(), id.slice(2)));
+    const relativeId = id.slice(2);
+    const candidates = [
+      path.resolve(process.cwd(), relativeId),
+      path.resolve(process.cwd(), "..", relativeId)
+    ];
+    for (const candidate of candidates) {
+      try {
+        return require(candidate);
+      } catch (error) {
+        const missingCandidate = error && error.code === "MODULE_NOT_FOUND" && typeof error.message === "string" && error.message.includes("'" + candidate + "'");
+        if (!missingCandidate) {
+          throw error;
+        }
+      }
+    }
   }
 
   return require(id);
@@ -487,26 +501,94 @@ function normalizeClientManifest(
 function createServerConsumerManifest(
   manifest: Record<string, unknown>,
 ) {
-  const consumerManifest: Record<string, { "*": { id: string; chunks?: string[]; name?: string; async?: boolean } }> = {};
+  type ClientManifestEntry = {
+    id?: string | number;
+    chunks?: Array<string | number>;
+    name?: string;
+    async?: boolean;
+  };
+
+  type ServerConsumerEntry = {
+    id: string;
+    chunks?: Array<string | number>;
+    name?: string;
+    async?: boolean;
+  };
+
+  const consumerManifest: Record<string, { "*": ServerConsumerEntry }> = {};
+
+  const normalizeWorkerModuleId = (requestKey: string, rawModuleId: unknown): string | null => {
+    if (typeof rawModuleId === "string" && rawModuleId.trim() !== "") {
+      return rawModuleId;
+    }
+
+    if (typeof rawModuleId !== "number" || !Number.isFinite(rawModuleId)) {
+      return null;
+    }
+
+    if (!requestKey || requestKey.trim() === "") {
+      return String(rawModuleId);
+    }
+
+    if (requestKey.startsWith("file://")) {
+      try {
+        return fileURLToPath(requestKey);
+      } catch {
+        return String(rawModuleId);
+      }
+    }
+
+    if (requestKey.startsWith("/")) {
+      return requestKey;
+    }
+
+    if (requestKey.startsWith("./")) {
+      return requestKey;
+    }
+
+    if (requestKey.startsWith("node_modules/") || requestKey.startsWith("build/")) {
+      return `./${requestKey}`;
+    }
+
+    return requestKey;
+  };
+
+  const addReference = (lookupKey: string, reference: ServerConsumerEntry) => {
+    if (!lookupKey || lookupKey.trim() === "") {
+      return;
+    }
+
+    if (lookupKey in consumerManifest) {
+      return;
+    }
+
+    consumerManifest[lookupKey] = {
+      "*": reference,
+    };
+  };
 
   for (const [key, value] of Object.entries(manifest)) {
     if (!value || typeof value !== "object") {
       continue;
     }
 
-    const entry = value as { id?: string; chunks?: string[]; name?: string; async?: boolean };
-    if (typeof entry.id !== "string" || entry.id.trim() === "") {
+    const entry = value as ClientManifestEntry;
+    const workerModuleId = normalizeWorkerModuleId(key, entry.id);
+    if (!workerModuleId) {
       continue;
     }
 
-    consumerManifest[key] = {
-      "*": {
-        id: entry.id,
-        chunks: [],
-        name: entry.name ?? "*",
-        ...(entry.async ? { async: entry.async } : {}),
-      },
+    const reference: ServerConsumerEntry = {
+      id: workerModuleId,
+      chunks: Array.isArray(entry.chunks) ? entry.chunks : [],
+      name: entry.name ?? "*",
+      ...(entry.async ? { async: entry.async } : {}),
     };
+
+    addReference(key, reference);
+    if (typeof entry.id === "number" && Number.isFinite(entry.id)) {
+      addReference(String(entry.id), reference);
+    }
   }
 
   return consumerManifest;

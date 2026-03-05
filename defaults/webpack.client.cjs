@@ -6,9 +6,14 @@ const frameworkDistDir = path.resolve(__dirname, "..", "dist");
 const clientEntry = process.env.WEBFRAMEZ_REACT_CLIENT_ENTRY
   ? path.resolve(projectRoot, process.env.WEBFRAMEZ_REACT_CLIENT_ENTRY)
   : path.resolve(projectRoot, "src/client.tsx");
+const isWatchMode = process.argv.includes("--watch");
+const mode =
+  process.env.NODE_ENV === "production" || (typeof process.env.NODE_ENV === "undefined" && !isWatchMode)
+    ? "production"
+    : "development";
 
 module.exports = {
-  mode: process.env.NODE_ENV === "production" ? "production" : "development",
+  mode,
   entry: {
     client: clientEntry,
   },
@@ -38,6 +43,8 @@ module.exports = {
   optimization: {
     splitChunks: false,
     runtimeChunk: false,
+    moduleIds: "named",
+    chunkIds: "named",
   },
   plugins: [
     new ReactFlightWebpackPlugin({
