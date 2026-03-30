@@ -9,7 +9,7 @@ export type AbortRouteOptions = {
   payload?: unknown;
 };
 
-export type RouteContext<TData = unknown> = {
+export type RouteContext<TData = any> = {
   pathname: string;
   params: RouteParams;
   searchParams: RouteSearchParams;
@@ -22,11 +22,11 @@ export type InferPageData<TDataResolver> =
   TDataResolver extends (...args: any[]) => any
     ? Awaited<ReturnType<TDataResolver>>
     : TDataResolver;
-export type PageProps<TData = unknown> = RouteContext<InferPageData<TData>>;
+export type PageProps<TData = any> = RouteContext<InferPageData<TData>>;
 export type PagePropsFromData<TDataResolver extends (...args: any[]) => any> =
   PageProps<InferPageData<TDataResolver>>;
 
-export type ErrorPageProps<TData = unknown> = RouteContext<TData> & {
+export type ErrorPageProps<TData = any> = RouteContext<TData> & {
   statusCode: number;
   message: string;
   payload?: unknown;
@@ -51,6 +51,7 @@ export type HeadLinkTag = {
 export type HeadConfig = {
   title?: string;
   description?: string;
+  assetsBaseUrl?: string;
   favicon?: string;
   meta?: HeadMetaTag[];
   links?: HeadLinkTag[];
@@ -65,18 +66,18 @@ export type HeadResolver<TContext = RouteContext> = (
   context: TContext
 ) => HeadConfig | Promise<HeadConfig>;
 
-export type PageDataResolver<TData = unknown> = (
+export type PageDataResolver<TData = any> = (
   context: RouteContext
 ) => TData | Promise<TData>;
 
 export type RouteMiddlewareResult = Record<string, unknown> | undefined | void;
-export type RouteMiddlewareResolver<TData = unknown> = (
+export type RouteMiddlewareResolver<TData = any> = (
   context: RouteContext<TData>
 ) => RouteMiddlewareResult | Promise<RouteMiddlewareResult>;
 export type RouteMiddlewareRegistry = Record<string, RouteMiddlewareResolver<any>>;
 export type RouteMiddlewareConfig = string | string[];
 
-export type PageModule<TData = unknown> = {
+export type PageModule<TData = any> = {
   default: (props: PageProps<TData>) => ReactNode | Promise<ReactNode>;
   Head?: HeadResolver<PageProps<TData>>;
   Data?: PageDataResolver<TData>;

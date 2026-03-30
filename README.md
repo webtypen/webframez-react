@@ -130,6 +130,25 @@ Route.renderReact("/app", {
 - Additional route options forwarded to `webframez-core`.
 - Typical use case: middleware.
 
+## `Head()` Assets
+
+Inside a page, layout, or error `Head()` method you can set `assetsBaseUrl`.
+That base URL is applied to `favicon` and `links[].href`, which is useful for CSS
+files and other head assets served from a CDN or shared asset host.
+
+```ts
+export function Head() {
+  return {
+    title: "Dashboard",
+    assetsBaseUrl: "https://cdn.example.com/app",
+    favicon: "/favicon.ico",
+    links: [{ rel: "stylesheet", href: "/styles/dashboard.css" }],
+  };
+}
+```
+
+Absolute URLs like `https://...` or `//...` stay unchanged.
+
 ## Recommended Project Structure
 
 ```txt

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { createFromFetch, createFromReadableStream } from "react-server-dom-webpack/client";
 import type { Root } from "react-dom/client";
+import { normalizeHeadConfig } from "./head";
 import type { ClientNavigationPayload, HeadConfig, HeadLinkTag, HeadMetaTag } from "./types";
 
 type ClientOptions = {
@@ -199,31 +200,33 @@ function applyHead(head: HeadConfig) {
     return;
   }
 
-  document.title = head.title || "Webframez React";
+  const normalizedHead = normalizeHeadConfig(head) ?? head;
+
+  document.title = normalizedHead.title || "Webframez React";
 
   for (const managedNode of document.head.querySelectorAll(MANAGED_HEAD_SELECTOR)) {
     managedNode.remove();
   }
 
-  if (head.description) {
+  if (normalizedHead.description) {
     appendManagedMetaTag({
       name: "description",
-      content: head.description,
+      content: normalizedHead.description,
     });
   }
 
-  if (head.favicon) {
+  if (normalizedHead.favicon) {
     appendManagedLinkTag({
       rel: "icon",
-      href: head.favicon,
+      href: normalizedHead.favicon,
     });
   }
 
-  for (const meta of head.meta ?? []) {
+  for (const meta of normalizedHead.meta ?? []) {
     appendManagedMetaTag(meta);
   }
 
-  for (const link of head.links ?? []) {
+  for (const link of normalizedHead.links ?? []) {
     appendManagedLinkTag(link);
   }
 }

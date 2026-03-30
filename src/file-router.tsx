@@ -2,6 +2,7 @@ import fs from "node:fs";
 import Module from "node:module";
 import path from "node:path";
 import React from "react";
+import { normalizeHeadConfig } from "./head";
 import { injectRouteChildren } from "./router-runtime";
 import type {
   AbortRouteOptions,
@@ -257,7 +258,8 @@ function mergeHead(...configs: Array<HeadConfig | undefined>) {
     links: [],
   };
 
-  for (const config of configs) {
+  for (const candidate of configs) {
+    const config = normalizeHeadConfig(candidate, merged.assetsBaseUrl);
     if (!config) {
       continue;
     }
@@ -267,6 +269,9 @@ function mergeHead(...configs: Array<HeadConfig | undefined>) {
     }
     if (config.description) {
       merged.description = config.description;
+    }
+    if (config.assetsBaseUrl) {
+      merged.assetsBaseUrl = config.assetsBaseUrl;
     }
     if (config.favicon) {
       merged.favicon = config.favicon;
@@ -283,21 +288,22 @@ function mergeHead(...configs: Array<HeadConfig | undefined>) {
 }
 
 export function renderHeadToString(head: HeadConfig) {
+  const normalizedHead = normalizeHeadConfig(head) ?? head;
   const tags: string[] = [];
 
-  if (head.description) {
+  if (normalizedHead.description) {
     tags.push(
-      `<meta ${createManagedAttributes()} name=\"description\" content=\"${escapeHtml(head.description)}\" />`
+      `<meta ${createManagedAttributes()} name=\"description\" content=\"${escapeHtml(normalizedHead.description)}\" />`
     );
   }
 
-  if (head.favicon) {
+  if (normalizedHead.favicon) {
     tags.push(
-      `<link ${createManagedAttributes()} rel=\"icon\" href=\"${escapeHtml(head.favicon)}\" />`
+      `<link ${createManagedAttributes()} rel=\"icon\" href=\"${escapeHtml(normalizedHead.favicon)}\" />`
     );
   }
 
-  for (const meta of head.meta ?? []) {
+  for (const meta of normalizedHead.meta ?? []) {
     const attrs = Object.entries(meta)
       .filter(([, value]) => Boolean(value))
       .map(([key, value]) => `${key}=\"${escapeHtml(String(value))}\"`)
@@ -305,7 +311,7 @@ export function renderHeadToString(head: HeadConfig) {
     tags.push(`<meta ${createManagedAttributes()} ${attrs} />`);
   }
 
-  for (const link of head.links ?? []) {
+  for (const link of normalizedHead.links ?? []) {
     const attrs = Object.entries(link)
       .filter(([, value]) => Boolean(value))
       .map(([key, value]) => `${key}=\"${escapeHtml(String(value))}\"`)

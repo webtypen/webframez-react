@@ -147,6 +147,62 @@ import fs from "node:fs";
 import Module from "node:module";
 import path2 from "node:path";
 
+// src/head.ts
+var ABSOLUTE_ASSET_URL_PATTERN = /^(?:[a-zA-Z][a-zA-Z\d+\-.]*:|\/\/|#)/;
+function normalizeAssetsBaseUrl(value) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return void 0;
+  }
+  if (trimmed === "/") {
+    return "/";
+  }
+  return trimmed.replace(/\/+$/, "");
+}
+function resolveHeadAssetUrl(assetUrl, assetsBaseUrl) {
+  const normalizedAssetUrl = assetUrl.trim();
+  const normalizedAssetsBaseUrl = normalizeAssetsBaseUrl(assetsBaseUrl);
+  if (!normalizedAssetUrl || !normalizedAssetsBaseUrl) {
+    return normalizedAssetUrl;
+  }
+  if (ABSOLUTE_ASSET_URL_PATTERN.test(normalizedAssetUrl)) {
+    return normalizedAssetUrl;
+  }
+  if (normalizedAssetsBaseUrl !== "/" && (normalizedAssetUrl === normalizedAssetsBaseUrl || normalizedAssetUrl.startsWith(`${normalizedAssetsBaseUrl}/`))) {
+    return normalizedAssetUrl;
+  }
+  if (normalizedAssetsBaseUrl === "/") {
+    return normalizedAssetUrl.startsWith("/") ? normalizedAssetUrl : `/${normalizedAssetUrl}`;
+  }
+  if (normalizedAssetUrl.startsWith("/")) {
+    return `${normalizedAssetsBaseUrl}${normalizedAssetUrl}`;
+  }
+  return `${normalizedAssetsBaseUrl}/${normalizedAssetUrl}`;
+}
+function normalizeHeadConfig(head, inheritedAssetsBaseUrl) {
+  if (!head) {
+    return void 0;
+  }
+  const effectiveAssetsBaseUrl = normalizeAssetsBaseUrl(head.assetsBaseUrl) ?? normalizeAssetsBaseUrl(inheritedAssetsBaseUrl);
+  const normalizedHead = {
+    ...head,
+    ...effectiveAssetsBaseUrl ? { assetsBaseUrl: effectiveAssetsBaseUrl } : {}
+  };
+  if (normalizedHead.favicon) {
+    normalizedHead.favicon = resolveHeadAssetUrl(
+      normalizedHead.favicon,
+      effectiveAssetsBaseUrl
+    );
+  }
+  if (normalizedHead.links) {
+    normalizedHead.links = normalizedHead.links.map((link) => ({
+      ...link,
+      href: resolveHeadAssetUrl(link.href, effectiveAssetsBaseUrl)
+    }));
+  }
+  return normalizedHead;
+}
+
 // src/router-runtime.tsx
 import React from "react";
 var ROUTE_CHILDREN_TAG = "webframez-route-children";
@@ -362,7 +418,8 @@ function mergeHead(...configs) {
     meta: [],
     links: []
   };
-  for (const config of configs) {
+  for (const candidate of configs) {
+    const config = normalizeHeadConfig(candidate, merged.assetsBaseUrl);
     if (!config) {
       continue;
     }
@@ -371,6 +428,9 @@ function mergeHead(...configs) {
     }
     if (config.description) {
       merged.description = config.description;
+    }
+    if (config.assetsBaseUrl) {
+      merged.assetsBaseUrl = config.assetsBaseUrl;
     }
     if (config.favicon) {
       merged.favicon = config.favicon;
@@ -385,22 +445,23 @@ function mergeHead(...configs) {
   return merged;
 }
 function renderHeadToString(head) {
+  const normalizedHead = normalizeHeadConfig(head) ?? head;
   const tags = [];
-  if (head.description) {
+  if (normalizedHead.description) {
     tags.push(
-      `<meta ${createManagedAttributes()} name="description" content="${escapeHtml(head.description)}" />`
+      `<meta ${createManagedAttributes()} name="description" content="${escapeHtml(normalizedHead.description)}" />`
     );
   }
-  if (head.favicon) {
+  if (normalizedHead.favicon) {
     tags.push(
-      `<link ${createManagedAttributes()} rel="icon" href="${escapeHtml(head.favicon)}" />`
+      `<link ${createManagedAttributes()} rel="icon" href="${escapeHtml(normalizedHead.favicon)}" />`
     );
   }
-  for (const meta of head.meta ?? []) {
+  for (const meta of normalizedHead.meta ?? []) {
     const attrs = Object.entries(meta).filter(([, value]) => Boolean(value)).map(([key, value]) => `${key}="${escapeHtml(String(value))}"`).join(" ");
     tags.push(`<meta ${createManagedAttributes()} ${attrs} />`);
   }
-  for (const link of head.links ?? []) {
+  for (const link of normalizedHead.links ?? []) {
     const attrs = Object.entries(link).filter(([, value]) => Boolean(value)).map(([key, value]) => `${key}="${escapeHtml(String(value))}"`).join(" ");
     tags.push(`<link ${createManagedAttributes()} ${attrs} />`);
   }
