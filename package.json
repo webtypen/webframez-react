@@ -78,9 +78,9 @@
   },
   "peerDependencies": {
     "@webtypen/webframez-core": "^0.3.30",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-server-dom-webpack": "^19.0.0"
+    "react": "^19.0.0 || >=0.0.0-0 <0.0.1",
+    "react-dom": "^19.0.0 || >=0.0.0-0 <0.0.1",
+    "react-server-dom-webpack": "^19.0.0 || >=0.0.0-0 <0.0.1"
   },
   "peerDependenciesMeta": {
     "@webtypen/webframez-core": {
