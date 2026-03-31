@@ -14,7 +14,7 @@ React Server Components (RSC) extension for `@webtypen/webframez-core`.
 
 - Node.js `>= 20`
 - `@webtypen/webframez-core`
-- React Experimental (matching the package peer dependencies)
+- React 19.x with matching `react-dom` and `react-server-dom-webpack`
 
 ## Installation
 
