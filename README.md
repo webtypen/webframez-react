@@ -132,15 +132,15 @@ Route.renderReact("/app", {
 
 ## `Head()` Assets
 
-Inside a page, layout, or error `Head()` method you can set `assetsBaseUrl`.
-That base URL is applied to `favicon` and `links[].href`, which is useful for CSS
-files and other head assets served from a CDN or shared asset host.
+Inside a page, layout, or error `Head()` method you can set `basename`.
+That basename is applied to `favicon` and `links[].href`, and also updates the
+router basename used by `Link`, `Redirect`, and client-side navigation.
 
 ```ts
 export function Head() {
   return {
     title: "Dashboard",
-    assetsBaseUrl: "https://cdn.example.com/app",
+    basename: "/app",
     favicon: "/favicon.ico",
     links: [{ rel: "stylesheet", href: "/styles/dashboard.css" }],
   };

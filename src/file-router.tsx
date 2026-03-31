@@ -14,6 +14,7 @@ import type {
   PageProps,
   PageModule,
   RouteContext,
+  RouteRequestContext,
   RouteMiddlewareConfig,
   RouteMiddlewareRegistry,
   RouteMiddlewareResult,
@@ -32,6 +33,7 @@ type ResolveInput = {
   pathname: string;
   searchParams: RouteSearchParams;
   cookies?: Record<string, string>;
+  request?: RouteRequestContext;
 };
 
 const FORCED_PACKAGE_REQUESTS = [
@@ -259,7 +261,7 @@ function mergeHead(...configs: Array<HeadConfig | undefined>) {
   };
 
   for (const candidate of configs) {
-    const config = normalizeHeadConfig(candidate, merged.assetsBaseUrl);
+    const config = normalizeHeadConfig(candidate, merged.basename);
     if (!config) {
       continue;
     }
@@ -270,8 +272,8 @@ function mergeHead(...configs: Array<HeadConfig | undefined>) {
     if (config.description) {
       merged.description = config.description;
     }
-    if (config.assetsBaseUrl) {
-      merged.assetsBaseUrl = config.assetsBaseUrl;
+    if (config.basename) {
+      merged.basename = config.basename;
     }
     if (config.favicon) {
       merged.favicon = config.favicon;
@@ -609,6 +611,12 @@ export function createFileRouter(options: { pagesDir: string }) {
       params: {},
       searchParams: input.searchParams,
       cookies: input.cookies ?? {},
+      request: input.request ?? {
+        host: null,
+        pathname,
+        originalPathname: pathname,
+        headers: {},
+      },
       abort: (options?: AbortRouteOptions) => {
         throw createAbort(options);
       },

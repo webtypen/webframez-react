@@ -2,6 +2,14 @@ import type React from "react";
 
 export type RouteParams = Record<string, string | string[]>;
 export type RouteSearchParams = Record<string, string | string[]>;
+export type RouteRequestHeaders = Record<string, string | string[] | undefined>;
+
+export type RouteRequestContext = {
+  host: string | null;
+  pathname: string;
+  originalPathname: string;
+  headers: RouteRequestHeaders;
+};
 
 export type AbortRouteOptions = {
   status?: number;
@@ -14,6 +22,7 @@ export type RouteContext<TData = any> = {
   params: RouteParams;
   searchParams: RouteSearchParams;
   cookies: Record<string, string>;
+  request: RouteRequestContext;
   data?: TData;
   abort: (options?: AbortRouteOptions) => never;
 };
@@ -51,7 +60,7 @@ export type HeadLinkTag = {
 export type HeadConfig = {
   title?: string;
   description?: string;
-  assetsBaseUrl?: string;
+  basename?: string;
   favicon?: string;
   meta?: HeadMetaTag[];
   links?: HeadLinkTag[];

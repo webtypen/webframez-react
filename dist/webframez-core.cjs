@@ -155,7 +155,7 @@ var import_node_path2 = __toESM(require("node:path"), 1);
 
 // src/head.ts
 var ABSOLUTE_ASSET_URL_PATTERN = /^(?:[a-zA-Z][a-zA-Z\d+\-.]*:|\/\/|#)/;
-function normalizeAssetsBaseUrl(value) {
+function normalizeHeadBasename(value) {
   const trimmed = value?.trim();
   if (!trimmed) {
     return void 0;
@@ -165,45 +165,45 @@ function normalizeAssetsBaseUrl(value) {
   }
   return trimmed.replace(/\/+$/, "");
 }
-function resolveHeadAssetUrl(assetUrl, assetsBaseUrl) {
+function resolveHeadAssetUrl(assetUrl, basename) {
   const normalizedAssetUrl = assetUrl.trim();
-  const normalizedAssetsBaseUrl = normalizeAssetsBaseUrl(assetsBaseUrl);
-  if (!normalizedAssetUrl || !normalizedAssetsBaseUrl) {
+  const normalizedBasename = normalizeHeadBasename(basename);
+  if (!normalizedAssetUrl || !normalizedBasename) {
     return normalizedAssetUrl;
   }
   if (ABSOLUTE_ASSET_URL_PATTERN.test(normalizedAssetUrl)) {
     return normalizedAssetUrl;
   }
-  if (normalizedAssetsBaseUrl !== "/" && (normalizedAssetUrl === normalizedAssetsBaseUrl || normalizedAssetUrl.startsWith(`${normalizedAssetsBaseUrl}/`))) {
+  if (normalizedBasename !== "/" && (normalizedAssetUrl === normalizedBasename || normalizedAssetUrl.startsWith(`${normalizedBasename}/`))) {
     return normalizedAssetUrl;
   }
-  if (normalizedAssetsBaseUrl === "/") {
+  if (normalizedBasename === "/") {
     return normalizedAssetUrl.startsWith("/") ? normalizedAssetUrl : `/${normalizedAssetUrl}`;
   }
   if (normalizedAssetUrl.startsWith("/")) {
-    return `${normalizedAssetsBaseUrl}${normalizedAssetUrl}`;
+    return `${normalizedBasename}${normalizedAssetUrl}`;
   }
-  return `${normalizedAssetsBaseUrl}/${normalizedAssetUrl}`;
+  return `${normalizedBasename}/${normalizedAssetUrl}`;
 }
-function normalizeHeadConfig(head, inheritedAssetsBaseUrl) {
+function normalizeHeadConfig(head, inheritedBasename) {
   if (!head) {
     return void 0;
   }
-  const effectiveAssetsBaseUrl = normalizeAssetsBaseUrl(head.assetsBaseUrl) ?? normalizeAssetsBaseUrl(inheritedAssetsBaseUrl);
+  const effectiveBasename = normalizeHeadBasename(head.basename) ?? normalizeHeadBasename(inheritedBasename);
   const normalizedHead = {
     ...head,
-    ...effectiveAssetsBaseUrl ? { assetsBaseUrl: effectiveAssetsBaseUrl } : {}
+    ...effectiveBasename ? { basename: effectiveBasename } : {}
   };
   if (normalizedHead.favicon) {
     normalizedHead.favicon = resolveHeadAssetUrl(
       normalizedHead.favicon,
-      effectiveAssetsBaseUrl
+      effectiveBasename
     );
   }
   if (normalizedHead.links) {
     normalizedHead.links = normalizedHead.links.map((link) => ({
       ...link,
-      href: resolveHeadAssetUrl(link.href, effectiveAssetsBaseUrl)
+      href: resolveHeadAssetUrl(link.href, effectiveBasename)
     }));
   }
   return normalizedHead;
@@ -425,7 +425,7 @@ function mergeHead(...configs) {
     links: []
   };
   for (const candidate of configs) {
-    const config = normalizeHeadConfig(candidate, merged.assetsBaseUrl);
+    const config = normalizeHeadConfig(candidate, merged.basename);
     if (!config) {
       continue;
     }
@@ -435,8 +435,8 @@ function mergeHead(...configs) {
     if (config.description) {
       merged.description = config.description;
     }
-    if (config.assetsBaseUrl) {
-      merged.assetsBaseUrl = config.assetsBaseUrl;
+    if (config.basename) {
+      merged.basename = config.basename;
     }
     if (config.favicon) {
       merged.favicon = config.favicon;
@@ -683,6 +683,12 @@ function createFileRouter(options) {
       params: {},
       searchParams: input.searchParams,
       cookies: input.cookies ?? {},
+      request: input.request ?? {
+        host: null,
+        pathname,
+        originalPathname: pathname,
+        headers: {}
+      },
       abort: (options2) => {
         throw createAbort(options2);
       }
@@ -909,6 +915,60 @@ function normalizeBasePath(basePath) {
   }
   const withLeadingSlash = basePath.startsWith("/") ? basePath : `/${basePath}`;
   return withLeadingSlash.endsWith("/") ? withLeadingSlash.slice(0, -1) : withLeadingSlash;
+}
+function normalizeRequestHostValue(value) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const firstValue = trimmed.split(",")[0]?.trim() || "";
+  if (!firstValue) {
+    return null;
+  }
+  if (firstValue.startsWith("[")) {
+    const closingIndex = firstValue.indexOf("]");
+    if (closingIndex > 0) {
+      return firstValue.slice(1, closingIndex).toLowerCase();
+    }
+  }
+  return firstValue.replace(/:\d+$/, "").toLowerCase();
+}
+function getRequestHost(req) {
+  const candidates = [
+    req.headers["x-forwarded-host"],
+    req.headers["x-original-host"],
+    req.headers.host
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      for (const singleValue of candidate) {
+        if (typeof singleValue !== "string") {
+          continue;
+        }
+        const normalized2 = normalizeRequestHostValue(singleValue);
+        if (normalized2) {
+          return normalized2;
+        }
+      }
+      continue;
+    }
+    if (typeof candidate !== "string") {
+      continue;
+    }
+    const normalized = normalizeRequestHostValue(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return null;
+}
+function createRouteRequestContext(req, pathname, originalPathname) {
+  return {
+    host: getRequestHost(req),
+    pathname,
+    originalPathname,
+    headers: req.headers
+  };
 }
 function stripBasePath(pathname, basePath) {
   if (!basePath) {
@@ -1255,13 +1315,19 @@ function createNodeRequestHandler(options) {
     }
     if (url.pathname === rscPath) {
       const pathname = stripBasePath(url.searchParams.get("path") || "/", basePath);
+      const requestContext = createRouteRequestContext(
+        req,
+        pathname,
+        url.searchParams.get("path") || "/"
+      );
       const search = new URLSearchParams(url.searchParams.get("search") || "");
       const resolved2 = await withRequestBasename(
         basePath,
         () => router.resolve({
           pathname,
           searchParams: parseSearchParams(search),
-          cookies: requestCookies
+          cookies: requestCookies,
+          request: requestContext
         })
       );
       const payload = {
@@ -1301,7 +1367,12 @@ function createNodeRequestHandler(options) {
       () => router.resolve({
         pathname: stripBasePath(url.pathname, basePath),
         searchParams: parseSearchParams(url.searchParams),
-        cookies: requestCookies
+        cookies: requestCookies,
+        request: createRouteRequestContext(
+          req,
+          stripBasePath(url.pathname, basePath),
+          url.pathname
+        )
       })
     );
     const initialPayload = {
@@ -1345,7 +1416,7 @@ function createNodeRequestHandler(options) {
               rscEndpoint: rscPath,
               rootHtml: createInitialHtmlErrorMarkup("Initial HTML render failed."),
               initialFlightData,
-              basename: basePath,
+              basename: resolved?.head?.basename ?? basePath,
               liveReloadPath: liveReloadPath || void 0,
               liveReloadServerId: liveReloadPath ? devServerId : void 0
             })
@@ -1364,7 +1435,7 @@ function createNodeRequestHandler(options) {
         rscEndpoint: rscPath,
         rootHtml,
         initialFlightData,
-        basename: basePath,
+        basename: resolved.head.basename ?? basePath,
         liveReloadPath: liveReloadPath || void 0,
         liveReloadServerId: liveReloadPath ? devServerId : void 0
       })

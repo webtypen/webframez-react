@@ -2,7 +2,7 @@ import type { HeadConfig } from "./types";
 
 const ABSOLUTE_ASSET_URL_PATTERN = /^(?:[a-zA-Z][a-zA-Z\d+\-.]*:|\/\/|#)/;
 
-export function normalizeAssetsBaseUrl(value?: string) {
+export function normalizeHeadBasename(value?: string) {
   const trimmed = value?.trim();
   if (!trimmed) {
     return undefined;
@@ -15,11 +15,11 @@ export function normalizeAssetsBaseUrl(value?: string) {
   return trimmed.replace(/\/+$/, "");
 }
 
-export function resolveHeadAssetUrl(assetUrl: string, assetsBaseUrl?: string) {
+export function resolveHeadAssetUrl(assetUrl: string, basename?: string) {
   const normalizedAssetUrl = assetUrl.trim();
-  const normalizedAssetsBaseUrl = normalizeAssetsBaseUrl(assetsBaseUrl);
+  const normalizedBasename = normalizeHeadBasename(basename);
 
-  if (!normalizedAssetUrl || !normalizedAssetsBaseUrl) {
+  if (!normalizedAssetUrl || !normalizedBasename) {
     return normalizedAssetUrl;
   }
 
@@ -28,52 +28,49 @@ export function resolveHeadAssetUrl(assetUrl: string, assetsBaseUrl?: string) {
   }
 
   if (
-    normalizedAssetsBaseUrl !== "/" &&
-    (normalizedAssetUrl === normalizedAssetsBaseUrl ||
-      normalizedAssetUrl.startsWith(`${normalizedAssetsBaseUrl}/`))
+    normalizedBasename !== "/" &&
+    (normalizedAssetUrl === normalizedBasename ||
+      normalizedAssetUrl.startsWith(`${normalizedBasename}/`))
   ) {
     return normalizedAssetUrl;
   }
 
-  if (normalizedAssetsBaseUrl === "/") {
+  if (normalizedBasename === "/") {
     return normalizedAssetUrl.startsWith("/") ? normalizedAssetUrl : `/${normalizedAssetUrl}`;
   }
 
   if (normalizedAssetUrl.startsWith("/")) {
-    return `${normalizedAssetsBaseUrl}${normalizedAssetUrl}`;
+    return `${normalizedBasename}${normalizedAssetUrl}`;
   }
 
-  return `${normalizedAssetsBaseUrl}/${normalizedAssetUrl}`;
+  return `${normalizedBasename}/${normalizedAssetUrl}`;
 }
 
-export function normalizeHeadConfig(
-  head?: HeadConfig,
-  inheritedAssetsBaseUrl?: string,
-) {
+export function normalizeHeadConfig(head?: HeadConfig, inheritedBasename?: string) {
   if (!head) {
     return undefined;
   }
 
-  const effectiveAssetsBaseUrl =
-    normalizeAssetsBaseUrl(head.assetsBaseUrl) ??
-    normalizeAssetsBaseUrl(inheritedAssetsBaseUrl);
+  const effectiveBasename =
+    normalizeHeadBasename(head.basename) ??
+    normalizeHeadBasename(inheritedBasename);
 
   const normalizedHead: HeadConfig = {
     ...head,
-    ...(effectiveAssetsBaseUrl ? { assetsBaseUrl: effectiveAssetsBaseUrl } : {}),
+    ...(effectiveBasename ? { basename: effectiveBasename } : {}),
   };
 
   if (normalizedHead.favicon) {
     normalizedHead.favicon = resolveHeadAssetUrl(
       normalizedHead.favicon,
-      effectiveAssetsBaseUrl,
+      effectiveBasename,
     );
   }
 
   if (normalizedHead.links) {
     normalizedHead.links = normalizedHead.links.map((link) => ({
       ...link,
-      href: resolveHeadAssetUrl(link.href, effectiveAssetsBaseUrl),
+      href: resolveHeadAssetUrl(link.href, effectiveBasename),
     }));
   }
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { createFromFetch, createFromReadableStream } from "react-server-dom-webpack/client";
 import type { Root } from "react-dom/client";
-import { normalizeHeadConfig } from "./head";
+import { normalizeHeadBasename, normalizeHeadConfig } from "./head";
 import type { ClientNavigationPayload, HeadConfig, HeadLinkTag, HeadMetaTag } from "./types";
 
 type ClientOptions = {
@@ -201,6 +201,8 @@ function applyHead(head: HeadConfig) {
   }
 
   const normalizedHead = normalizeHeadConfig(head) ?? head;
+  const normalizedBasename = normalizeHeadBasename(normalizedHead.basename);
+  (window as Window & { __RSC_BASENAME?: string }).__RSC_BASENAME = normalizedBasename ?? "";
 
   document.title = normalizedHead.title || "Webframez React";
 

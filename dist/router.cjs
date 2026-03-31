@@ -43,7 +43,7 @@ var import_node_path = __toESM(require("node:path"), 1);
 
 // src/head.ts
 var ABSOLUTE_ASSET_URL_PATTERN = /^(?:[a-zA-Z][a-zA-Z\d+\-.]*:|\/\/|#)/;
-function normalizeAssetsBaseUrl(value) {
+function normalizeHeadBasename(value) {
   const trimmed = value?.trim();
   if (!trimmed) {
     return void 0;
@@ -53,45 +53,45 @@ function normalizeAssetsBaseUrl(value) {
   }
   return trimmed.replace(/\/+$/, "");
 }
-function resolveHeadAssetUrl(assetUrl, assetsBaseUrl) {
+function resolveHeadAssetUrl(assetUrl, basename) {
   const normalizedAssetUrl = assetUrl.trim();
-  const normalizedAssetsBaseUrl = normalizeAssetsBaseUrl(assetsBaseUrl);
-  if (!normalizedAssetUrl || !normalizedAssetsBaseUrl) {
+  const normalizedBasename = normalizeHeadBasename(basename);
+  if (!normalizedAssetUrl || !normalizedBasename) {
     return normalizedAssetUrl;
   }
   if (ABSOLUTE_ASSET_URL_PATTERN.test(normalizedAssetUrl)) {
     return normalizedAssetUrl;
   }
-  if (normalizedAssetsBaseUrl !== "/" && (normalizedAssetUrl === normalizedAssetsBaseUrl || normalizedAssetUrl.startsWith(`${normalizedAssetsBaseUrl}/`))) {
+  if (normalizedBasename !== "/" && (normalizedAssetUrl === normalizedBasename || normalizedAssetUrl.startsWith(`${normalizedBasename}/`))) {
     return normalizedAssetUrl;
   }
-  if (normalizedAssetsBaseUrl === "/") {
+  if (normalizedBasename === "/") {
     return normalizedAssetUrl.startsWith("/") ? normalizedAssetUrl : `/${normalizedAssetUrl}`;
   }
   if (normalizedAssetUrl.startsWith("/")) {
-    return `${normalizedAssetsBaseUrl}${normalizedAssetUrl}`;
+    return `${normalizedBasename}${normalizedAssetUrl}`;
   }
-  return `${normalizedAssetsBaseUrl}/${normalizedAssetUrl}`;
+  return `${normalizedBasename}/${normalizedAssetUrl}`;
 }
-function normalizeHeadConfig(head, inheritedAssetsBaseUrl) {
+function normalizeHeadConfig(head, inheritedBasename) {
   if (!head) {
     return void 0;
   }
-  const effectiveAssetsBaseUrl = normalizeAssetsBaseUrl(head.assetsBaseUrl) ?? normalizeAssetsBaseUrl(inheritedAssetsBaseUrl);
+  const effectiveBasename = normalizeHeadBasename(head.basename) ?? normalizeHeadBasename(inheritedBasename);
   const normalizedHead = {
     ...head,
-    ...effectiveAssetsBaseUrl ? { assetsBaseUrl: effectiveAssetsBaseUrl } : {}
+    ...effectiveBasename ? { basename: effectiveBasename } : {}
   };
   if (normalizedHead.favicon) {
     normalizedHead.favicon = resolveHeadAssetUrl(
       normalizedHead.favicon,
-      effectiveAssetsBaseUrl
+      effectiveBasename
     );
   }
   if (normalizedHead.links) {
     normalizedHead.links = normalizedHead.links.map((link) => ({
       ...link,
-      href: resolveHeadAssetUrl(link.href, effectiveAssetsBaseUrl)
+      href: resolveHeadAssetUrl(link.href, effectiveBasename)
     }));
   }
   return normalizedHead;
@@ -313,7 +313,7 @@ function mergeHead(...configs) {
     links: []
   };
   for (const candidate of configs) {
-    const config = normalizeHeadConfig(candidate, merged.assetsBaseUrl);
+    const config = normalizeHeadConfig(candidate, merged.basename);
     if (!config) {
       continue;
     }
@@ -323,8 +323,8 @@ function mergeHead(...configs) {
     if (config.description) {
       merged.description = config.description;
     }
-    if (config.assetsBaseUrl) {
-      merged.assetsBaseUrl = config.assetsBaseUrl;
+    if (config.basename) {
+      merged.basename = config.basename;
     }
     if (config.favicon) {
       merged.favicon = config.favicon;
@@ -571,6 +571,12 @@ function createFileRouter(options) {
       params: {},
       searchParams: input.searchParams,
       cookies: input.cookies ?? {},
+      request: input.request ?? {
+        host: null,
+        pathname,
+        originalPathname: pathname,
+        headers: {}
+      },
       abort: (options2) => {
         throw createAbort(options2);
       }

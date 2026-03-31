@@ -5,7 +5,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createHTMLShell, renderRSCToString, sendRSC } from "./server";
 import { createFileRouter, parseSearchParams, renderHeadToString } from "./router";
-import type { ClientNavigationPayload } from "./types";
+import type { ClientNavigationPayload, RouteRequestContext } from "./types";
 
 export type WebframezReactRoutePath = `/${string}` | "/";
 export type WebframezReactAssetsPrefix = `${WebframezReactRoutePath}/` | "/";
@@ -229,6 +229,75 @@ function normalizeBasePath(basePath?: string) {
   return withLeadingSlash.endsWith("/")
     ? withLeadingSlash.slice(0, -1)
     : withLeadingSlash;
+}
+
+function normalizeRequestHostValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const firstValue = trimmed.split(",")[0]?.trim() || "";
+  if (!firstValue) {
+    return null;
+  }
+
+  if (firstValue.startsWith("[")) {
+    const closingIndex = firstValue.indexOf("]");
+    if (closingIndex > 0) {
+      return firstValue.slice(1, closingIndex).toLowerCase();
+    }
+  }
+
+  return firstValue.replace(/:\d+$/, "").toLowerCase();
+}
+
+function getRequestHost(req: IncomingMessage) {
+  const candidates = [
+    req.headers["x-forwarded-host"],
+    req.headers["x-original-host"],
+    req.headers.host,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      for (const singleValue of candidate) {
+        if (typeof singleValue !== "string") {
+          continue;
+        }
+
+        const normalized = normalizeRequestHostValue(singleValue);
+        if (normalized) {
+          return normalized;
+        }
+      }
+      continue;
+    }
+
+    if (typeof candidate !== "string") {
+      continue;
+    }
+
+    const normalized = normalizeRequestHostValue(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function createRouteRequestContext(
+  req: IncomingMessage,
+  pathname: string,
+  originalPathname: string,
+): RouteRequestContext {
+  return {
+    host: getRequestHost(req),
+    pathname,
+    originalPathname,
+    headers: req.headers,
+  };
 }
 
 function stripBasePath(pathname: string, basePath: string) {
@@ -683,12 +752,18 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
 
     if (url.pathname === rscPath) {
       const pathname = stripBasePath(url.searchParams.get("path") || "/", basePath);
+      const requestContext = createRouteRequestContext(
+        req,
+        pathname,
+        url.searchParams.get("path") || "/",
+      );
       const search = new URLSearchParams(url.searchParams.get("search") || "");
       const resolved = await withRequestBasename(basePath, () =>
         router.resolve({
           pathname,
           searchParams: parseSearchParams(search),
           cookies: requestCookies,
+          request: requestContext,
         })
       );
 
@@ -733,6 +808,11 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         pathname: stripBasePath(url.pathname, basePath),
         searchParams: parseSearchParams(url.searchParams),
         cookies: requestCookies,
+        request: createRouteRequestContext(
+          req,
+          stripBasePath(url.pathname, basePath),
+          url.pathname,
+        ),
       })
     );
     const initialPayload: ClientNavigationPayload = {
@@ -776,7 +856,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
               rscEndpoint: rscPath,
               rootHtml: createInitialHtmlErrorMarkup("Initial HTML render failed."),
               initialFlightData,
-              basename: basePath,
+              basename: resolved?.head?.basename ?? basePath,
               liveReloadPath: liveReloadPath || undefined,
               liveReloadServerId: liveReloadPath ? devServerId : undefined,
             }),
@@ -796,7 +876,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         rscEndpoint: rscPath,
         rootHtml,
         initialFlightData,
-        basename: basePath,
+        basename: resolved.head.basename ?? basePath,
         liveReloadPath: liveReloadPath || undefined,
         liveReloadServerId: liveReloadPath ? devServerId : undefined,
       })
