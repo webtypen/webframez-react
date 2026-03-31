@@ -45,6 +45,78 @@ const RouterContext: React.Context<RouterClient | null> | null =
 const GLOBAL_ROUTER_KEY = "__WEBFRAMEZ_ROUTER__";
 const MANAGED_HEAD_SELECTOR = "[data-webframez-head='true']";
 
+function normalizeClientBasePath(value?: string) {
+  return normalizeHeadBasename(value) ?? "";
+}
+
+function stripPathPrefix(pathname: string, prefix: string) {
+  if (!prefix) {
+    return pathname || "/";
+  }
+
+  if (pathname === prefix) {
+    return "/";
+  }
+
+  if (pathname.startsWith(`${prefix}/`)) {
+    return pathname.slice(prefix.length) || "/";
+  }
+
+  return pathname || "/";
+}
+
+function joinBaseAndPath(basePath: string, pathname: string) {
+  const normalizedPath =
+    !pathname || pathname === "/"
+      ? "/"
+      : pathname.startsWith("/")
+        ? pathname
+        : `/${pathname}`;
+
+  if (!basePath) {
+    return normalizedPath;
+  }
+
+  return normalizedPath === "/" ? basePath : `${basePath}${normalizedPath}`;
+}
+
+function getGlobalRouteBasePath() {
+  if (typeof window === "undefined") {
+    return normalizeClientBasePath(
+      (globalThis as { __RSC_ROUTE_BASE_PATH?: string }).__RSC_ROUTE_BASE_PATH,
+    );
+  }
+
+  return normalizeClientBasePath(
+    (window as Window & { __RSC_ROUTE_BASE_PATH?: string }).__RSC_ROUTE_BASE_PATH,
+  );
+}
+
+function resolveRouteRequestPath(pathname: string) {
+  if (typeof window === "undefined") {
+    return pathname || "/";
+  }
+
+  const visibleBasename = normalizeClientBasePath(
+    (window as Window & { __RSC_BASENAME?: string }).__RSC_BASENAME,
+  );
+  const routeBasePath = getGlobalRouteBasePath();
+  const relativePath = stripPathPrefix(pathname || "/", visibleBasename);
+
+  return joinBaseAndPath(routeBasePath, relativePath);
+}
+
+function resolveRscEndpoint(defaultEndpoint: string) {
+  if (typeof window === "undefined") {
+    return defaultEndpoint;
+  }
+
+  const runtimeEndpoint = (window as Window & { __RSC_ENDPOINT?: string }).__RSC_ENDPOINT;
+  return typeof runtimeEndpoint === "string" && runtimeEndpoint.trim() !== ""
+    ? runtimeEndpoint
+    : defaultEndpoint;
+}
+
 function readGlobalRouter() {
   if (typeof window === "undefined") {
     return null;
@@ -202,7 +274,19 @@ function applyHead(head: HeadConfig) {
 
   const normalizedHead = normalizeHeadConfig(head) ?? head;
   const normalizedBasename = normalizeHeadBasename(normalizedHead.basename);
+  const normalizedRouteBasePath = normalizeHeadBasename(
+    normalizedHead.routeBasePath,
+  );
+  const normalizedTransportBasePath = normalizeHeadBasename(
+    normalizedHead.transportBasePath,
+  );
   (window as Window & { __RSC_BASENAME?: string }).__RSC_BASENAME = normalizedBasename ?? "";
+  (window as Window & { __RSC_ROUTE_BASE_PATH?: string }).__RSC_ROUTE_BASE_PATH =
+    normalizedRouteBasePath ?? "";
+  if (normalizedTransportBasePath !== undefined) {
+    (window as Window & { __RSC_ENDPOINT?: string }).__RSC_ENDPOINT =
+      joinBaseAndPath(normalizedTransportBasePath, "/rsc");
+  }
 
   document.title = normalizedHead.title || "Webframez React";
 
@@ -261,11 +345,14 @@ function readInitialPayload(): Promise<ClientNavigationPayload> | null {
 }
 
 function createInitialResponse(rscEndpoint: string) {
+  const endpoint = resolveRscEndpoint(rscEndpoint);
+  const requestPath = resolveRouteRequestPath(window.location.pathname);
+
   return (
     readInitialPayload() ??
     (createFromFetch(
       fetch(
-        `${rscEndpoint}?path=${encodeURIComponent(window.location.pathname)}&search=${encodeURIComponent(window.location.search)}`,
+        `${endpoint}?path=${encodeURIComponent(requestPath)}&search=${encodeURIComponent(window.location.search)}`,
         {
           headers: {
             Accept: "text/x-component",
@@ -288,9 +375,11 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
       setPending(true);
 
       try {
+        const endpoint = resolveRscEndpoint(rscEndpoint);
+        const requestPath = resolveRouteRequestPath(url.pathname);
         const response = createFromFetch(
           fetch(
-            `${rscEndpoint}?path=${encodeURIComponent(url.pathname)}&search=${encodeURIComponent(url.search)}`,
+            `${endpoint}?path=${encodeURIComponent(requestPath)}&search=${encodeURIComponent(url.search)}`,
             {
               headers: {
                 Accept: "text/x-component",

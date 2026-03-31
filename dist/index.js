@@ -24,6 +24,7 @@ function createHTMLShell(options = {}) {
     rootHtml = "",
     initialFlightData = "",
     basename = "",
+    routeBasePath = "",
     liveReloadPath,
     liveReloadServerId
   } = options;
@@ -72,6 +73,7 @@ function createHTMLShell(options = {}) {
     <div id="root">${rootHtml}</div>
     <script>window.__RSC_ENDPOINT = "${rscEndpoint}";</script>
     <script>window.__RSC_BASENAME = "${basename}";</script>
+    <script>window.__RSC_ROUTE_BASE_PATH = "${routeBasePath}";</script>
     <script>window.__RSC_INITIAL_PAYLOAD = ${escapedInitialFlightData};</script>
     <script type="module" src="${clientScriptUrl}"></script>
     ${liveReloadScript}
@@ -150,12 +152,12 @@ import path2 from "node:path";
 // src/head.ts
 var ABSOLUTE_ASSET_URL_PATTERN = /^(?:[a-zA-Z][a-zA-Z\d+\-.]*:|\/\/|#)/;
 function normalizeHeadBasename(value) {
-  const trimmed = value?.trim();
-  if (!trimmed) {
+  if (typeof value !== "string") {
     return void 0;
   }
-  if (trimmed === "/") {
-    return "/";
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "/") {
+    return "";
   }
   return trimmed.replace(/\/+$/, "");
 }
@@ -166,6 +168,9 @@ function resolveHeadAssetUrl(assetUrl, basename) {
     return normalizedAssetUrl;
   }
   if (ABSOLUTE_ASSET_URL_PATTERN.test(normalizedAssetUrl)) {
+    return normalizedAssetUrl;
+  }
+  if (normalizedAssetUrl.startsWith("/")) {
     return normalizedAssetUrl;
   }
   if (normalizedBasename !== "/" && (normalizedAssetUrl === normalizedBasename || normalizedAssetUrl.startsWith(`${normalizedBasename}/`))) {
@@ -184,9 +189,15 @@ function normalizeHeadConfig(head, inheritedBasename) {
     return void 0;
   }
   const effectiveBasename = normalizeHeadBasename(head.basename) ?? normalizeHeadBasename(inheritedBasename);
+  const normalizedRouteBasePath = normalizeHeadBasename(head.routeBasePath);
+  const normalizedTransportBasePath = normalizeHeadBasename(
+    head.transportBasePath
+  );
   const normalizedHead = {
     ...head,
-    ...effectiveBasename ? { basename: effectiveBasename } : {}
+    ...effectiveBasename !== void 0 ? { basename: effectiveBasename } : {},
+    ...normalizedRouteBasePath !== void 0 ? { routeBasePath: normalizedRouteBasePath } : {},
+    ...normalizedTransportBasePath !== void 0 ? { transportBasePath: normalizedTransportBasePath } : {}
   };
   if (normalizedHead.favicon) {
     normalizedHead.favicon = resolveHeadAssetUrl(
@@ -1000,6 +1011,23 @@ function stripBasePath(pathname, basePath) {
   }
   return pathname;
 }
+function normalizeRuntimeBasePath(value) {
+  if (typeof value !== "string") {
+    return void 0;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "/") {
+    return "";
+  }
+  return trimmed.replace(/\/+$/, "");
+}
+function joinRuntimeBasePath(basePath, pathname) {
+  const normalizedPath = !pathname || pathname === "/" ? "/" : pathname.startsWith("/") ? pathname : `/${pathname}`;
+  if (!basePath) {
+    return normalizedPath;
+  }
+  return normalizedPath === "/" ? basePath : `${basePath}${normalizedPath}`;
+}
 function sanitizeInitialHtmlWorkerNodeOptions(rawNodeOptions) {
   if (!rawNodeOptions || rawNodeOptions.trim() === "") {
     return "";
@@ -1400,6 +1428,14 @@ function createNodeRequestHandler(options) {
     const initialFlightData = await renderRSCToString(initialPayload, {
       moduleMap
     });
+    const transportBasePath = normalizeRuntimeBasePath(resolved.head.transportBasePath) ?? normalizeRuntimeBasePath(basePath) ?? "";
+    const shellClientScriptUrl = joinRuntimeBasePath(
+      transportBasePath,
+      "/assets/client.js"
+    );
+    const shellRscEndpoint = joinRuntimeBasePath(transportBasePath, "/rsc");
+    const shellBasename = normalizeRuntimeBasePath(resolved.head.basename) ?? normalizeRuntimeBasePath(basePath) ?? "";
+    const shellRouteBasePath = normalizeRuntimeBasePath(resolved.head.routeBasePath) ?? "";
     let rootHtml = "";
     try {
       rootHtml = await initialHtmlWorker.renderFromFlightData({
@@ -1430,11 +1466,12 @@ function createNodeRequestHandler(options) {
             createHTMLShell({
               title: "500 - Initial HTML render failed",
               headTags: "",
-              clientScriptUrl,
-              rscEndpoint: rscPath,
+              clientScriptUrl: shellClientScriptUrl,
+              rscEndpoint: shellRscEndpoint,
               rootHtml: createInitialHtmlErrorMarkup("Initial HTML render failed."),
               initialFlightData,
-              basename: resolved?.head?.basename ?? basePath,
+              basename: shellBasename,
+              routeBasePath: shellRouteBasePath,
               liveReloadPath: liveReloadPath || void 0,
               liveReloadServerId: liveReloadPath ? devServerId : void 0
             })
@@ -1449,11 +1486,12 @@ function createNodeRequestHandler(options) {
       createHTMLShell({
         title: resolved.head.title || "Webframez React",
         headTags: renderHeadToString(resolved.head),
-        clientScriptUrl,
-        rscEndpoint: rscPath,
+        clientScriptUrl: shellClientScriptUrl,
+        rscEndpoint: shellRscEndpoint,
         rootHtml,
         initialFlightData,
-        basename: resolved.head.basename ?? basePath,
+        basename: shellBasename,
+        routeBasePath: shellRouteBasePath,
         liveReloadPath: liveReloadPath || void 0,
         liveReloadServerId: liveReloadPath ? devServerId : void 0
       })

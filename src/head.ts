@@ -3,13 +3,13 @@ import type { HeadConfig } from "./types";
 const ABSOLUTE_ASSET_URL_PATTERN = /^(?:[a-zA-Z][a-zA-Z\d+\-.]*:|\/\/|#)/;
 
 export function normalizeHeadBasename(value?: string) {
-  const trimmed = value?.trim();
-  if (!trimmed) {
+  if (typeof value !== "string") {
     return undefined;
   }
 
-  if (trimmed === "/") {
-    return "/";
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "/") {
+    return "";
   }
 
   return trimmed.replace(/\/+$/, "");
@@ -24,6 +24,10 @@ export function resolveHeadAssetUrl(assetUrl: string, basename?: string) {
   }
 
   if (ABSOLUTE_ASSET_URL_PATTERN.test(normalizedAssetUrl)) {
+    return normalizedAssetUrl;
+  }
+
+  if (normalizedAssetUrl.startsWith("/")) {
     return normalizedAssetUrl;
   }
 
@@ -54,10 +58,20 @@ export function normalizeHeadConfig(head?: HeadConfig, inheritedBasename?: strin
   const effectiveBasename =
     normalizeHeadBasename(head.basename) ??
     normalizeHeadBasename(inheritedBasename);
+  const normalizedRouteBasePath = normalizeHeadBasename(head.routeBasePath);
+  const normalizedTransportBasePath = normalizeHeadBasename(
+    head.transportBasePath,
+  );
 
   const normalizedHead: HeadConfig = {
     ...head,
-    ...(effectiveBasename ? { basename: effectiveBasename } : {}),
+    ...(effectiveBasename !== undefined ? { basename: effectiveBasename } : {}),
+    ...(normalizedRouteBasePath !== undefined
+      ? { routeBasePath: normalizedRouteBasePath }
+      : {}),
+    ...(normalizedTransportBasePath !== undefined
+      ? { transportBasePath: normalizedTransportBasePath }
+      : {}),
   };
 
   if (normalizedHead.favicon) {

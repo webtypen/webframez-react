@@ -19,6 +19,7 @@ export function createHTMLShell(options: CreateHtmlShellOptions = {}) {
     rootHtml = "",
     initialFlightData = "",
     basename = "",
+    routeBasePath = "",
     liveReloadPath,
     liveReloadServerId,
   } = options;
@@ -78,6 +79,7 @@ export function createHTMLShell(options: CreateHtmlShellOptions = {}) {
     <div id="root">${rootHtml}</div>
     <script>window.__RSC_ENDPOINT = "${rscEndpoint}";</script>
     <script>window.__RSC_BASENAME = "${basename}";</script>
+    <script>window.__RSC_ROUTE_BASE_PATH = "${routeBasePath}";</script>
     <script>window.__RSC_INITIAL_PAYLOAD = ${escapedInitialFlightData};</script>
     <script type="module" src="${clientScriptUrl}"></script>
     ${liveReloadScript}

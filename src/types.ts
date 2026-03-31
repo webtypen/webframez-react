@@ -61,6 +61,8 @@ export type HeadConfig = {
   title?: string;
   description?: string;
   basename?: string;
+  routeBasePath?: string;
+  transportBasePath?: string;
   favicon?: string;
   meta?: HeadMetaTag[];
   links?: HeadLinkTag[];
@@ -116,6 +118,7 @@ export type CreateHtmlShellOptions = {
   initialFlightData?: string;
   clientRenderMode?: "hydrate" | "mount";
   basename?: string;
+  routeBasePath?: string;
   liveReloadPath?: string;
   liveReloadServerId?: string;
 };

@@ -336,6 +336,34 @@ function stripBasePath(pathname: string, basePath: string) {
   return pathname;
 }
 
+function normalizeRuntimeBasePath(value?: string | null) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "/") {
+    return "";
+  }
+
+  return trimmed.replace(/\/+$/, "");
+}
+
+function joinRuntimeBasePath(basePath: string, pathname: string) {
+  const normalizedPath =
+    !pathname || pathname === "/"
+      ? "/"
+      : pathname.startsWith("/")
+        ? pathname
+        : `/${pathname}`;
+
+  if (!basePath) {
+    return normalizedPath;
+  }
+
+  return normalizedPath === "/" ? basePath : `${basePath}${normalizedPath}`;
+}
+
 function sanitizeInitialHtmlWorkerNodeOptions(rawNodeOptions?: string) {
   if (!rawNodeOptions || rawNodeOptions.trim() === "") {
     return "";
@@ -842,6 +870,21 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
     const initialFlightData = await renderRSCToString(initialPayload, {
       moduleMap,
     });
+    const transportBasePath =
+      normalizeRuntimeBasePath(resolved.head.transportBasePath) ??
+      normalizeRuntimeBasePath(basePath) ??
+      "";
+    const shellClientScriptUrl = joinRuntimeBasePath(
+      transportBasePath,
+      "/assets/client.js",
+    );
+    const shellRscEndpoint = joinRuntimeBasePath(transportBasePath, "/rsc");
+    const shellBasename =
+      normalizeRuntimeBasePath(resolved.head.basename) ??
+      normalizeRuntimeBasePath(basePath) ??
+      "";
+    const shellRouteBasePath =
+      normalizeRuntimeBasePath(resolved.head.routeBasePath) ?? "";
     let rootHtml = "";
     try {
       rootHtml = await initialHtmlWorker.renderFromFlightData({
@@ -872,11 +915,12 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
             createHTMLShell({
               title: "500 - Initial HTML render failed",
               headTags: "",
-              clientScriptUrl,
-              rscEndpoint: rscPath,
+              clientScriptUrl: shellClientScriptUrl,
+              rscEndpoint: shellRscEndpoint,
               rootHtml: createInitialHtmlErrorMarkup("Initial HTML render failed."),
               initialFlightData,
-              basename: resolved?.head?.basename ?? basePath,
+              basename: shellBasename,
+              routeBasePath: shellRouteBasePath,
               liveReloadPath: liveReloadPath || undefined,
               liveReloadServerId: liveReloadPath ? devServerId : undefined,
             }),
@@ -892,11 +936,12 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       createHTMLShell({
         title: resolved.head.title || "Webframez React",
         headTags: renderHeadToString(resolved.head),
-        clientScriptUrl,
-        rscEndpoint: rscPath,
+        clientScriptUrl: shellClientScriptUrl,
+        rscEndpoint: shellRscEndpoint,
         rootHtml,
         initialFlightData,
-        basename: resolved.head.basename ?? basePath,
+        basename: shellBasename,
+        routeBasePath: shellRouteBasePath,
         liveReloadPath: liveReloadPath || undefined,
         liveReloadServerId: liveReloadPath ? devServerId : undefined,
       })
