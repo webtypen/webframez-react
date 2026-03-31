@@ -42,7 +42,7 @@ var import_node_path = __toESM(require("node:path"), 1);
 var import_node_stream = require("node:stream");
 var import_node_module = require("node:module");
 var import_server = require("react-server-dom-webpack/server");
-var import_client = require("react-server-dom-webpack/client.node");
+var reactServerDomClientNode = __toESM(require("react-server-dom-webpack/client.node"), 1);
 function defaultOnError(err) {
   console.error("[webframez-react] RSC render error", err);
 }
@@ -746,8 +746,8 @@ function createInitialHtmlErrorMarkup(message) {
 var INITIAL_HTML_WORKER_SCRIPT = `
 const path = require("node:path");
 const Module = require("node:module");
-const { Writable } = require("node:stream");
-const { createFromReadableStream } = require("react-server-dom-webpack/client.node");
+const { Readable, Writable } = require("node:stream");
+const reactServerDomClientNode = require("react-server-dom-webpack/client.node");
 
 const originalResolveFilename = Module._resolveFilename;
 const rootParent = {
@@ -865,14 +865,34 @@ function createReadableStreamFromString(value) {
   });
 }
 
+async function decodeFlightPayloadFromString(flightData, moduleMap) {
+  const serverConsumerManifest = {
+    moduleMap: moduleMap || {},
+    serverModuleMap: null,
+    moduleLoading: null
+  };
+
+  if (typeof reactServerDomClientNode.createFromNodeStream === "function") {
+    return await reactServerDomClientNode.createFromNodeStream(
+      Readable.from([flightData]),
+      serverConsumerManifest
+    );
+  }
+
+  if (typeof reactServerDomClientNode.createFromReadableStream === "function") {
+    return await reactServerDomClientNode.createFromReadableStream(
+      createReadableStreamFromString(flightData),
+      { serverConsumerManifest }
+    );
+  }
+
+  throw new Error(
+    "react-server-dom-webpack/client.node does not provide createFromNodeStream or createFromReadableStream."
+  );
+}
+
 async function renderHtmlFromFlightData(flightData, moduleMap) {
-  const payload = await createFromReadableStream(createReadableStreamFromString(flightData), {
-    serverConsumerManifest: {
-      moduleMap: moduleMap || {},
-      serverModuleMap: null,
-      moduleLoading: null
-    }
-  });
+  const payload = await decodeFlightPayloadFromString(flightData, moduleMap);
 
   const model =
     payload && typeof payload === "object" && "model" in payload

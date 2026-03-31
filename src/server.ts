@@ -1,8 +1,8 @@
 import path from "node:path";
-import { Writable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import { createRequire } from "node:module";
 import { renderToPipeableStream } from "react-server-dom-webpack/server";
-import { createFromReadableStream } from "react-server-dom-webpack/client.node";
+import * as reactServerDomClientNode from "react-server-dom-webpack/client.node";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ClientNavigationPayload, CreateHtmlShellOptions, SendRSCOptions } from "./types";
 
@@ -126,6 +126,56 @@ function createReadableStreamFromString(value: string) {
   });
 }
 
+async function decodeFlightPayloadFromString(
+  flightData: string,
+  moduleMap: Record<string, unknown> = {}
+) {
+  const clientNode = reactServerDomClientNode as {
+    createFromNodeStream?: (
+      stream: NodeJS.ReadableStream,
+      serverConsumerManifest: {
+        moduleMap: Record<string, unknown>;
+        serverModuleMap: null;
+        moduleLoading: null;
+      },
+      options?: Record<string, unknown>
+    ) => Promise<unknown> | unknown;
+    createFromReadableStream?: (
+      stream: ReadableStream<Uint8Array>,
+      options: {
+        serverConsumerManifest: {
+          moduleMap: Record<string, unknown>;
+          serverModuleMap: null;
+          moduleLoading: null;
+        };
+      }
+    ) => Promise<unknown> | unknown;
+  };
+  const serverConsumerManifest = {
+    moduleMap,
+    serverModuleMap: null,
+    moduleLoading: null,
+  };
+
+  if (typeof clientNode.createFromNodeStream === "function") {
+    return await clientNode.createFromNodeStream(
+      Readable.from([flightData]),
+      serverConsumerManifest,
+    );
+  }
+
+  if (typeof clientNode.createFromReadableStream === "function") {
+    return await clientNode.createFromReadableStream(
+      createReadableStreamFromString(flightData),
+      { serverConsumerManifest },
+    );
+  }
+
+  throw new Error(
+    "react-server-dom-webpack/client.node does not provide createFromNodeStream or createFromReadableStream.",
+  );
+}
+
 export async function renderHtmlFromFlightData(
   flightData: string,
   options: Pick<SendRSCOptions, "moduleMap">
@@ -151,13 +201,7 @@ export async function renderHtmlFromFlightData(
   const { renderToString } = appRequire(path.join(path.dirname(reactDomPkg), "server.node.js")) as {
     renderToString: (model: unknown) => string;
   };
-  const payload = await createFromReadableStream(createReadableStreamFromString(flightData), {
-    serverConsumerManifest: {
-      moduleMap: options.moduleMap ?? {},
-      serverModuleMap: null,
-      moduleLoading: null,
-    },
-  });
+  const payload = await decodeFlightPayloadFromString(flightData, options.moduleMap ?? {});
 
   const model =
     payload && typeof payload === "object" && "model" in payload
