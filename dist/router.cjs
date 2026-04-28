@@ -326,14 +326,21 @@ function mergeHead(...configs) {
     if (!config) {
       continue;
     }
+    const hasOwn = (key) => Object.prototype.hasOwnProperty.call(config, key);
     if (config.title) {
       merged.title = config.title;
     }
     if (config.description) {
       merged.description = config.description;
     }
-    if (config.basename) {
+    if (hasOwn("basename")) {
       merged.basename = config.basename;
+    }
+    if (hasOwn("routeBasePath")) {
+      merged.routeBasePath = config.routeBasePath;
+    }
+    if (hasOwn("transportBasePath")) {
+      merged.transportBasePath = config.transportBasePath;
     }
     if (config.favicon) {
       merged.favicon = config.favicon;

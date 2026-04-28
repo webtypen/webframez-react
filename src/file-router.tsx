@@ -265,6 +265,8 @@ function mergeHead(...configs: Array<HeadConfig | undefined>) {
     if (!config) {
       continue;
     }
+    const hasOwn = (key: keyof HeadConfig) =>
+      Object.prototype.hasOwnProperty.call(config, key);
 
     if (config.title) {
       merged.title = config.title;
@@ -272,8 +274,14 @@ function mergeHead(...configs: Array<HeadConfig | undefined>) {
     if (config.description) {
       merged.description = config.description;
     }
-    if (config.basename) {
+    if (hasOwn("basename")) {
       merged.basename = config.basename;
+    }
+    if (hasOwn("routeBasePath")) {
+      merged.routeBasePath = config.routeBasePath;
+    }
+    if (hasOwn("transportBasePath")) {
+      merged.transportBasePath = config.transportBasePath;
     }
     if (config.favicon) {
       merged.favicon = config.favicon;

@@ -161,7 +161,7 @@ async function decodeFlightPayloadFromString(
 
   if (typeof clientNode.createFromNodeStream === "function") {
     return await clientNode.createFromNodeStream(
-      Readable.from([flightData]),
+      Readable.from([Buffer.from(flightData)]),
       serverConsumerManifest,
     );
   }

@@ -187,7 +187,7 @@ async function decodeFlightPayloadFromString(flightData, moduleMap) {
 
   if (typeof reactServerDomClientNode.createFromNodeStream === "function") {
     return await reactServerDomClientNode.createFromNodeStream(
-      Readable.from([flightData]),
+      Readable.from([Buffer.from(flightData)]),
       serverConsumerManifest
     );
   }
