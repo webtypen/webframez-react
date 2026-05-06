@@ -954,7 +954,21 @@ async function renderHtmlFromFlightData(flightData, moduleMap) {
       ? payload.model
       : payload;
 
-  return renderHtml(model);
+  const basename =
+    payload &&
+    typeof payload === "object" &&
+    payload.head &&
+    typeof payload.head.basename === "string"
+      ? payload.head.basename
+      : "";
+
+  const previousBasename = globalThis.__RSC_BASENAME;
+  globalThis.__RSC_BASENAME = basename;
+  try {
+    return await renderHtml(model);
+  } finally {
+    globalThis.__RSC_BASENAME = previousBasename;
+  }
 }
 
 process.on("message", async (message) => {

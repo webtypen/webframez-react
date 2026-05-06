@@ -210,7 +210,25 @@ export async function renderHtmlFromFlightData(
       ? payload.model
       : payload;
 
-  return renderToString(model);
+  const basename =
+    payload &&
+    typeof payload === "object" &&
+    "head" in payload &&
+    payload.head &&
+    typeof payload.head === "object" &&
+    "basename" in payload.head &&
+    typeof payload.head.basename === "string"
+      ? payload.head.basename
+      : "";
+
+  const basenameTarget = globalThis as { __RSC_BASENAME?: string };
+  const previousBasename = basenameTarget.__RSC_BASENAME;
+  basenameTarget.__RSC_BASENAME = basename;
+  try {
+    return renderToString(model);
+  } finally {
+    basenameTarget.__RSC_BASENAME = previousBasename;
+  }
 }
 
 export function sendRSC(

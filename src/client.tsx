@@ -273,20 +273,7 @@ function applyHead(head: HeadConfig) {
   }
 
   const normalizedHead = normalizeHeadConfig(head) ?? head;
-  const normalizedBasename = normalizeHeadBasename(normalizedHead.basename);
-  const normalizedRouteBasePath = normalizeHeadBasename(
-    normalizedHead.routeBasePath,
-  );
-  const normalizedTransportBasePath = normalizeHeadBasename(
-    normalizedHead.transportBasePath,
-  );
-  (window as Window & { __RSC_BASENAME?: string }).__RSC_BASENAME = normalizedBasename ?? "";
-  (window as Window & { __RSC_ROUTE_BASE_PATH?: string }).__RSC_ROUTE_BASE_PATH =
-    normalizedRouteBasePath ?? "";
-  if (normalizedTransportBasePath !== undefined) {
-    (window as Window & { __RSC_ENDPOINT?: string }).__RSC_ENDPOINT =
-      joinBaseAndPath(normalizedTransportBasePath, "/rsc");
-  }
+  applyHeadRuntimeGlobals(normalizedHead);
 
   document.title = normalizedHead.title || "Webframez React";
 
@@ -314,6 +301,28 @@ function applyHead(head: HeadConfig) {
 
   for (const link of normalizedHead.links ?? []) {
     appendManagedLinkTag(link);
+  }
+}
+
+function applyHeadRuntimeGlobals(head: HeadConfig) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const normalizedHead = normalizeHeadConfig(head) ?? head;
+  const normalizedBasename = normalizeHeadBasename(normalizedHead.basename);
+  const normalizedRouteBasePath = normalizeHeadBasename(
+    normalizedHead.routeBasePath,
+  );
+  const normalizedTransportBasePath = normalizeHeadBasename(
+    normalizedHead.transportBasePath,
+  );
+  (window as Window & { __RSC_BASENAME?: string }).__RSC_BASENAME = normalizedBasename ?? "";
+  (window as Window & { __RSC_ROUTE_BASE_PATH?: string }).__RSC_ROUTE_BASE_PATH =
+    normalizedRouteBasePath ?? "";
+  if (normalizedTransportBasePath !== undefined) {
+    (window as Window & { __RSC_ENDPOINT?: string }).__RSC_ENDPOINT =
+      joinBaseAndPath(normalizedTransportBasePath, "/rsc");
   }
 }
 
@@ -471,7 +480,13 @@ export function mountWebframezClient(options: ClientOptions = {}) {
     typeof window !== "undefined" && (window as Window & { __RSC_ENDPOINT?: string }).__RSC_ENDPOINT;
   const rscEndpoint = options.rscEndpoint ?? endpointFromGlobal ?? "/rsc";
 
-  const initialResponse = createInitialResponse(rscEndpoint);
+  const initialResponse = Promise.resolve(createInitialResponse(rscEndpoint)).then((payload) => {
+    if (payload?.head) {
+      applyHeadRuntimeGlobals(payload.head);
+    }
+
+    return payload;
+  });
   const App = createApp(initialResponse, rscEndpoint);
   const root = hydrateRoot(rootEl, <App />);
 
