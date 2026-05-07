@@ -42,6 +42,22 @@ function isRouteChildrenType(type: unknown) {
   }
 }
 
+function isReactElementLike(node: unknown): node is {
+  type: unknown;
+  key?: React.Key | null;
+  props?: { children?: React.ReactNode };
+} {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+
+  try {
+    return "type" in node && "props" in node;
+  } catch {
+    return false;
+  }
+}
+
 export function injectRouteChildren(
   node: React.ReactNode,
   routeChildren: React.ReactNode
@@ -62,15 +78,20 @@ export function injectRouteChildren(
     return changed ? next : node;
   }
 
-  if (!React.isValidElement(node)) {
-    return node;
-  }
-
-  if (isRouteChildrenType(node.type)) {
+  if (isReactElementLike(node) && isRouteChildrenType(node.type)) {
     return routeChildren;
   }
 
-  const props = node.props as { children?: React.ReactNode };
+  const isValidElement = React.isValidElement(node);
+  if (!isValidElement && !isReactElementLike(node)) {
+    return node;
+  }
+
+  if (isValidElement && isRouteChildrenType(node.type)) {
+    return routeChildren;
+  }
+
+  const props = (node as { props?: { children?: React.ReactNode } }).props ?? {};
   if (!("children" in props)) {
     return node;
   }
@@ -80,9 +101,24 @@ export function injectRouteChildren(
     return node;
   }
 
-  if (Array.isArray(nextChildren)) {
-    return React.cloneElement(node, undefined, ...nextChildren);
+  if (isValidElement) {
+    if (Array.isArray(nextChildren)) {
+      return React.cloneElement(node, undefined, ...nextChildren);
+    }
+
+    return React.cloneElement(node, undefined, nextChildren);
   }
 
-  return React.cloneElement(node, undefined, nextChildren);
+  const elementLike = node as {
+    type: React.ElementType;
+    key?: React.Key | null;
+    props?: Record<string, unknown>;
+  };
+  const nextProps = {
+    ...(elementLike.props ?? {}),
+    children: nextChildren,
+    ...(elementLike.key !== undefined && elementLike.key !== null ? { key: elementLike.key } : {}),
+  };
+
+  return React.createElement(elementLike.type, nextProps);
 }

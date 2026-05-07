@@ -43,6 +43,11 @@
       "import": "./dist/navigation.js",
       "require": "./dist/navigation.cjs"
     },
+    "./route-slot": {
+      "types": "./dist/route-slot.d.ts",
+      "import": "./dist/route-slot.js",
+      "require": "./dist/route-slot.cjs"
+    },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js",

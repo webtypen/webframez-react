@@ -9,6 +9,7 @@ export type RouterClient = {
   push: (href: string) => void;
   replace: (href: string) => void;
   refresh: () => void;
+  refreshContext: () => void;
 };
 
 export type CookieOptions = {

@@ -245,6 +245,7 @@ export function sendRSC(
 
   res.statusCode = statusCode;
   res.setHeader("Content-Type", contentType);
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
 
   const stream = renderToPipeableStream(model, moduleMap, { onError });
   stream.pipe(res);

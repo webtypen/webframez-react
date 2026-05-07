@@ -5,6 +5,8 @@ export type ResolvedRoute = {
   statusCode: number;
   model: ReactNode;
   head: HeadConfig;
+  contextModel?: ReactNode;
+  pageModel?: ReactNode;
 };
 
 export function createFileRouter(options: { pagesDir: string }): {

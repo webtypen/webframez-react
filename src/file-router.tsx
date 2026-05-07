@@ -2,6 +2,7 @@ import fs from "node:fs";
 import Module from "node:module";
 import path from "node:path";
 import React from "react";
+import { RouteChildrenSlot } from "@webtypen/webframez-react/route-slot";
 import { normalizeHeadConfig } from "./head";
 import { injectRouteChildren } from "./router-runtime";
 import type {
@@ -65,6 +66,8 @@ export type ResolvedRoute = {
   statusCode: number;
   model: React.ReactNode;
   head: HeadConfig;
+  contextModel?: React.ReactNode;
+  pageModel?: React.ReactNode;
 };
 
 function normalizePathname(pathname: string) {
@@ -509,10 +512,15 @@ export function createFileRouter(options: { pagesDir: string }) {
     const model = layoutNode
       ? injectRouteChildren(layoutNode, errorNode)
       : errorNode;
+    const contextModel = layoutNode
+      ? injectRouteChildren(layoutNode, <RouteChildrenSlot />)
+      : undefined;
 
     return {
       statusCode,
       model,
+      contextModel,
+      pageModel: errorNode,
       head: mergeHead(layoutHead, errorHead),
     };
   }
@@ -671,10 +679,15 @@ export function createFileRouter(options: { pagesDir: string }) {
       const model = layoutNode
         ? injectRouteChildren(layoutNode, pageNode)
         : pageNode;
+      const contextModel = layoutNode
+        ? injectRouteChildren(layoutNode, <RouteChildrenSlot />)
+        : undefined;
 
       return {
         statusCode: 200,
         model,
+        contextModel,
+        pageModel: pageNode,
         head: mergeHead(layoutHead, pageHead),
       };
     } catch (error) {

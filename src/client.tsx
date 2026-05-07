@@ -2,7 +2,9 @@ import React, { useEffect, useState } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { createFromFetch, createFromReadableStream } from "react-server-dom-webpack/client";
 import type { Root } from "react-dom/client";
+import { RouteChildrenSlotProvider } from "@webtypen/webframez-react/route-slot";
 import { normalizeHeadBasename, normalizeHeadConfig } from "./head";
+import { injectRouteChildren } from "./router-runtime";
 import type { ClientNavigationPayload, HeadConfig, HeadLinkTag, HeadMetaTag } from "./types";
 
 type ClientOptions = {
@@ -14,12 +16,14 @@ export type RouterClient = {
   push: (href: string) => void;
   replace: (href: string) => void;
   refresh: () => void;
+  refreshContext: () => void;
 };
 
 const noopRouter: RouterClient = {
   push: () => {},
   replace: () => {},
   refresh: () => {},
+  refreshContext: () => {},
 };
 
 export type CookieOptions = {
@@ -363,6 +367,8 @@ function createInitialResponse(rscEndpoint: string) {
       fetch(
         `${endpoint}?path=${encodeURIComponent(requestPath)}&search=${encodeURIComponent(window.location.search)}`,
         {
+          cache: "no-store",
+          credentials: "same-origin",
           headers: {
             Accept: "text/x-component",
           },
@@ -375,32 +381,51 @@ function createInitialResponse(rscEndpoint: string) {
 function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoint: string) {
   return function App() {
     const initialPayload = React.use(initialResponse);
+    const hasInitialSplitTree =
+      typeof initialPayload.contextModel !== "undefined" &&
+      typeof initialPayload.pageModel !== "undefined";
     const [tree, setTree] = useState<React.ReactNode>(initialPayload.model);
+    const [contextTree, setContextTree] = useState<React.ReactNode | undefined>(
+      initialPayload.contextModel,
+    );
+    const [pageTree, setPageTree] = useState<React.ReactNode | undefined>(
+      initialPayload.pageModel,
+    );
     const [head, setHead] = useState<HeadConfig>(initialPayload.head);
     const [pending, setPending] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [renderSplitTree, setRenderSplitTree] = useState(hasInitialSplitTree);
+
+    async function fetchRoutePayload(url: URL) {
+      const endpoint = resolveRscEndpoint(rscEndpoint);
+      const requestPath = resolveRouteRequestPath(url.pathname);
+      const response = createFromFetch(
+        fetch(
+          `${endpoint}?path=${encodeURIComponent(requestPath)}&search=${encodeURIComponent(url.search)}`,
+          {
+            cache: "no-store",
+            credentials: "same-origin",
+            headers: {
+              Accept: "text/x-component",
+            },
+          }
+        )
+      );
+
+      return await (response as Promise<ClientNavigationPayload>);
+    }
 
     async function navigate(url: URL, mode: "push" | "replace" | "none" = "push") {
       setPending(true);
 
       try {
-        const endpoint = resolveRscEndpoint(rscEndpoint);
-        const requestPath = resolveRouteRequestPath(url.pathname);
-        const response = createFromFetch(
-          fetch(
-            `${endpoint}?path=${encodeURIComponent(requestPath)}&search=${encodeURIComponent(url.search)}`,
-            {
-              headers: {
-                Accept: "text/x-component",
-              },
-            }
-          )
-        );
-
-        const nextPayload = await (response as Promise<ClientNavigationPayload>);
+        const nextPayload = await fetchRoutePayload(url);
         applyHead(nextPayload.head);
         setHead(nextPayload.head);
         setTree(nextPayload.model);
+        setContextTree(nextPayload.contextModel);
+        setPageTree(nextPayload.pageModel);
+        setRenderSplitTree(true);
 
         const nextHref = `${url.pathname}${url.search}`;
         if (mode === "replace") {
@@ -411,6 +436,29 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
       } catch (error) {
         console.error("[webframez-react] Failed to render route", error);
         setTree(<p>Failed to load route.</p>);
+      } finally {
+        setPending(false);
+      }
+    }
+
+    async function refreshContext() {
+      setPending(true);
+
+      try {
+        const nextPayload = await fetchRoutePayload(new URL(window.location.href));
+        applyHead(nextPayload.head);
+        setHead(nextPayload.head);
+
+        if (Object.prototype.hasOwnProperty.call(nextPayload, "contextModel")) {
+          setContextTree(nextPayload.contextModel);
+          setRenderSplitTree(true);
+          return;
+        }
+
+        setTree(nextPayload.model);
+        setRenderSplitTree(false);
+      } catch (error) {
+        console.error("[webframez-react] Failed to refresh route context", error);
       } finally {
         setPending(false);
       }
@@ -445,15 +493,29 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
         refresh: () => {
           void navigate(new URL(window.location.href), "none");
         },
+        refreshContext: () => {
+          void refreshContext();
+        },
       }),
       []
     );
     writeGlobalRouter(routerValue);
 
+    const renderedTree =
+      renderSplitTree && typeof pageTree !== "undefined"
+        ? contextTree
+          ? (
+              <RouteChildrenSlotProvider page={pageTree}>
+                {injectRouteChildren(contextTree, pageTree)}
+              </RouteChildrenSlotProvider>
+            )
+          : pageTree
+        : tree;
+
     const content = (
       <>
         {mounted ? <LoaderBar active={pending} /> : null}
-        {tree ?? <p style={{ padding: 24 }}>Loading...</p>}
+        {renderedTree ?? <p style={{ padding: 24 }}>Loading...</p>}
       </>
     );
 

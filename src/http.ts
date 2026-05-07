@@ -831,6 +831,8 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
 
       const payload: ClientNavigationPayload = {
         model: resolved.model,
+        contextModel: resolved.contextModel,
+        pageModel: resolved.pageModel,
         head: resolved.head,
       };
       sendRSC(res, payload, {
@@ -855,6 +857,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       } else if (ext === ".json") {
         res.setHeader("Content-Type", "application/json; charset=utf-8");
       }
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
 
       const stream = fs.createReadStream(filePath);
       stream.on("error", () => {
@@ -879,6 +882,8 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
     );
     const initialPayload: ClientNavigationPayload = {
       model: resolved.model,
+      contextModel: resolved.contextModel,
+      pageModel: resolved.pageModel,
       head: resolved.head,
     };
     const initialFlightData = await renderRSCToString(initialPayload, {

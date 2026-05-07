@@ -5,7 +5,15 @@ const isWatch = process.argv.includes("--watch");
 const isProductionBuild = !isWatch;
 
 const sharedNode = {
-  entryPoints: ["src/index.ts", "src/router.ts", "src/types.ts", "src/http.ts", "src/webframez-core.ts", "src/navigation.tsx"],
+  entryPoints: [
+    "src/index.ts",
+    "src/router.ts",
+    "src/types.ts",
+    "src/http.ts",
+    "src/webframez-core.ts",
+    "src/navigation.tsx",
+    "src/route-slot.tsx",
+  ],
   bundle: true,
   splitting: false,
   sourcemap: isWatch,
@@ -21,6 +29,7 @@ const sharedNode = {
     "react-server-dom-webpack/client.node",
     "node:*",
     "@webtypen/webframez-core",
+    "@webtypen/webframez-react/route-slot",
   ],
 };
 
@@ -34,7 +43,12 @@ const sharedClient = {
   target: "es2022",
   jsx: "automatic",
   legalComments: "none",
-  external: ["react", "react-dom", "react-server-dom-webpack/client"],
+  external: [
+    "react",
+    "react-dom",
+    "react-server-dom-webpack/client",
+    "@webtypen/webframez-react/route-slot",
+  ],
 };
 
 async function copyTypes() {
@@ -44,6 +58,7 @@ async function copyTypes() {
   await copyFile("src/types.d.ts", "dist/types.d.ts");
   await copyFile("src/client.d.ts", "dist/client.d.ts");
   await copyFile("src/navigation.d.ts", "dist/navigation.d.ts");
+  await copyFile("src/route-slot.d.ts", "dist/route-slot.d.ts");
   await copyFile("src/http.d.ts", "dist/http.d.ts");
   await copyFile("src/webframez-core.d.ts", "dist/webframez-core.d.ts");
 }

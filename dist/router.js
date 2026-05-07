@@ -10,6 +10,7 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
 import fs from "node:fs";
 import Module from "node:module";
 import path from "node:path";
+import { RouteChildrenSlot } from "@webtypen/webframez-react/route-slot";
 
 // src/head.ts
 var ABSOLUTE_ASSET_URL_PATTERN = /^(?:[a-zA-Z][a-zA-Z\d+\-.]*:|\/\/|#)/;
@@ -99,6 +100,16 @@ function isRouteChildrenType(type) {
     return false;
   }
 }
+function isReactElementLike(node) {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  try {
+    return "type" in node && "props" in node;
+  } catch {
+    return false;
+  }
+}
 function injectRouteChildren(node, routeChildren) {
   if (node === null || node === void 0 || typeof node === "boolean") {
     return node;
@@ -114,13 +125,17 @@ function injectRouteChildren(node, routeChildren) {
     });
     return changed ? next : node;
   }
-  if (!React.isValidElement(node)) {
-    return node;
-  }
-  if (isRouteChildrenType(node.type)) {
+  if (isReactElementLike(node) && isRouteChildrenType(node.type)) {
     return routeChildren;
   }
-  const props = node.props;
+  const isValidElement = React.isValidElement(node);
+  if (!isValidElement && !isReactElementLike(node)) {
+    return node;
+  }
+  if (isValidElement && isRouteChildrenType(node.type)) {
+    return routeChildren;
+  }
+  const props = node.props ?? {};
   if (!("children" in props)) {
     return node;
   }
@@ -128,10 +143,19 @@ function injectRouteChildren(node, routeChildren) {
   if (nextChildren === props.children) {
     return node;
   }
-  if (Array.isArray(nextChildren)) {
-    return React.cloneElement(node, void 0, ...nextChildren);
+  if (isValidElement) {
+    if (Array.isArray(nextChildren)) {
+      return React.cloneElement(node, void 0, ...nextChildren);
+    }
+    return React.cloneElement(node, void 0, nextChildren);
   }
-  return React.cloneElement(node, void 0, nextChildren);
+  const elementLike = node;
+  const nextProps = {
+    ...elementLike.props ?? {},
+    children: nextChildren,
+    ...elementLike.key !== void 0 && elementLike.key !== null ? { key: elementLike.key } : {}
+  };
+  return React.createElement(elementLike.type, nextProps);
 }
 
 // src/file-router.tsx
@@ -472,9 +496,12 @@ function createFileRouter(options) {
     const errorHead = await resolveHead(errorModule, errorProps);
     const layoutNode = layoutModule ? await layoutModule.default(context) : null;
     const model = layoutNode ? injectRouteChildren(layoutNode, errorNode) : errorNode;
+    const contextModel = layoutNode ? injectRouteChildren(layoutNode, /* @__PURE__ */ jsx(RouteChildrenSlot, {})) : void 0;
     return {
       statusCode,
       model,
+      contextModel,
+      pageModel: errorNode,
       head: mergeHead(layoutHead, errorHead)
     };
   }
@@ -594,9 +621,12 @@ function createFileRouter(options) {
       const pageHead = await resolveHead(pageModule, pageContext);
       const layoutNode = layoutModule ? await layoutModule.default(pageContext) : null;
       const model = layoutNode ? injectRouteChildren(layoutNode, pageNode) : pageNode;
+      const contextModel = layoutNode ? injectRouteChildren(layoutNode, /* @__PURE__ */ jsx(RouteChildrenSlot, {})) : void 0;
       return {
         statusCode: 200,
         model,
+        contextModel,
+        pageModel: pageNode,
         head: mergeHead(layoutHead, pageHead)
       };
     } catch (error) {

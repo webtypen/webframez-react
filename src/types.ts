@@ -71,6 +71,8 @@ export type HeadConfig = {
 export type ClientNavigationPayload = {
   model: React.ReactNode;
   head: HeadConfig;
+  contextModel?: React.ReactNode;
+  pageModel?: React.ReactNode;
 };
 
 export type HeadResolver<TContext = RouteContext> = (
