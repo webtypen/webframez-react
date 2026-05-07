@@ -49,6 +49,30 @@ const RouterContext: React.Context<RouterClient | null> | null =
 const GLOBAL_ROUTER_KEY = "__WEBFRAMEZ_ROUTER__";
 const MANAGED_HEAD_SELECTOR = "[data-webframez-head='true']";
 
+function scrollToTop() {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return;
+  }
+
+  const scroll = () => {
+    window.scrollTo({ top: 0, left: 0 });
+    if (document.scrollingElement) {
+      document.scrollingElement.scrollTop = 0;
+    }
+    document.documentElement.scrollTop = 0;
+    if (document.body) {
+      document.body.scrollTop = 0;
+    }
+  };
+
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(scroll);
+    return;
+  }
+
+  window.setTimeout(scroll, 0);
+}
+
 function normalizeClientBasePath(value?: string) {
   return normalizeHeadBasename(value) ?? "";
 }
@@ -430,8 +454,10 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
         const nextHref = `${url.pathname}${url.search}`;
         if (mode === "replace") {
           history.replaceState(null, "", nextHref);
+          scrollToTop();
         } else if (mode === "push") {
           history.pushState(null, "", nextHref);
+          scrollToTop();
         }
       } catch (error) {
         console.error("[webframez-react] Failed to render route", error);
