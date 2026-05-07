@@ -646,7 +646,7 @@ function createServerConsumerManifest(
     async?: boolean;
   };
 
-  const consumerManifest: Record<string, { "*": ServerConsumerEntry }> = {};
+  const consumerManifest: Record<string, Record<string, ServerConsumerEntry>> = {};
 
   const normalizeWorkerModuleId = (requestKey: string, rawModuleId: unknown): string | null => {
     if (typeof rawModuleId === "string" && rawModuleId.trim() !== "") {
@@ -684,18 +684,18 @@ function createServerConsumerManifest(
     return requestKey;
   };
 
-  const addReference = (lookupKey: string, reference: ServerConsumerEntry) => {
+  const addReference = (lookupKey: string, exportName: string, reference: ServerConsumerEntry) => {
     if (!lookupKey || lookupKey.trim() === "") {
       return;
     }
 
-    if (lookupKey in consumerManifest) {
+    const normalizedExportName = exportName || "*";
+    consumerManifest[lookupKey] ??= {};
+    if (normalizedExportName in consumerManifest[lookupKey]) {
       return;
     }
 
-    consumerManifest[lookupKey] = {
-      "*": reference,
-    };
+    consumerManifest[lookupKey][normalizedExportName] = reference;
   };
 
   for (const [key, value] of Object.entries(manifest)) {
@@ -716,9 +716,39 @@ function createServerConsumerManifest(
       ...(entry.async ? { async: entry.async } : {}),
     };
 
-    addReference(key, reference);
+    const hashIndex = key.lastIndexOf("#");
+    const keyWithoutExport = hashIndex > -1 ? key.slice(0, hashIndex) : key;
+    const keyExportName = hashIndex > -1 ? key.slice(hashIndex + 1) : "";
+    const manifestExportName =
+      typeof entry.name === "string" && entry.name !== "*" ? entry.name : "";
+    const exportNames = new Set<string>(
+      [keyExportName, manifestExportName].filter((name) => name.trim() !== ""),
+    );
+
+    addReference(
+      key,
+      "*",
+      keyExportName ? { ...reference, name: keyExportName } : reference,
+    );
+    addReference(keyWithoutExport, "*", reference);
+
+    for (const exportName of exportNames) {
+      const exportReference = {
+        ...reference,
+        name: exportName,
+      };
+      addReference(keyWithoutExport, exportName, exportReference);
+      addReference(key, "*", exportReference);
+    }
+
     if (typeof entry.id === "number" && Number.isFinite(entry.id)) {
-      addReference(String(entry.id), reference);
+      addReference(String(entry.id), "*", reference);
+      for (const exportName of exportNames) {
+        addReference(String(entry.id), exportName, {
+          ...reference,
+          name: exportName,
+        });
+      }
     }
   }
 
