@@ -13,6 +13,7 @@ const sharedNode = {
     "src/webframez-core.ts",
     "src/navigation.tsx",
     "src/route-slot.tsx",
+    "src/build-plugin.ts",
   ],
   bundle: true,
   splitting: false,
@@ -61,6 +62,7 @@ async function copyTypes() {
   await copyFile("src/route-slot.d.ts", "dist/route-slot.d.ts");
   await copyFile("src/http.d.ts", "dist/http.d.ts");
   await copyFile("src/webframez-core.d.ts", "dist/webframez-core.d.ts");
+  await copyFile("src/build-plugin.d.ts", "dist/build-plugin.d.ts");
 }
 
 const builds = [

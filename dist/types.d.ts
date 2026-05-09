@@ -114,7 +114,6 @@ export type CreateHtmlShellOptions = {
   headTags?: string;
   rootHtml?: string;
   initialFlightData?: string;
-  clientRenderMode?: "hydrate" | "mount";
   basename?: string;
   routeBasePath?: string;
   liveReloadPath?: string;

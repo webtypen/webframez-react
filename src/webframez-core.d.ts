@@ -11,14 +11,32 @@ export interface WebframezCoreRouteRegistrationOptions {
 }
 
 export interface WebframezCoreReactRenderRouteOptions
-  extends CreateNodeHandlerOptions {
+  extends Partial<CreateNodeHandlerOptions> {
+  srcPath?: string;
+  clientEntryPath?: string;
+  styleSrcPath?: string;
   method?: WebframezCoreRouteMethod | WebframezCoreRouteMethod[];
   routeOptions?: WebframezCoreRouteRegistrationOptions;
 }
 
+export type WebframezReactBuildTarget = {
+  path: string;
+  routePath: string;
+  routeKey: string;
+  srcPath: string;
+  distRootDir: string;
+  pagesDir: string;
+  manifestPath: string;
+  assetsPrefix?: string;
+  rscPath?: string;
+  clientScriptUrl?: string;
+  clientEntryPath?: string;
+  styleSrcPath?: string;
+};
+
 export interface WebframezCoreRouteFacadeExtensions {
-  renderReact(path: string, options: WebframezCoreReactRenderRouteOptions): void;
-  reactRender(path: string, options: WebframezCoreReactRenderRouteOptions): void;
+  renderReact(path: string, options?: WebframezCoreReactRenderRouteOptions): void;
+  reactRender(path: string, options?: WebframezCoreReactRenderRouteOptions): void;
 }
 
 declare module "@webtypen/webframez-core" {
@@ -41,3 +59,9 @@ export function initWebframezReact<T extends RouteFacade>(
   route: T,
 ): T & WebframezCoreRouteFacadeExtensions;
 export const setupWebframezCoreReactRoute: typeof initWebframezReact;
+export function resolveWebframezReactRouteOptions(
+  path: string,
+  options?: WebframezCoreReactRenderRouteOptions,
+): CreateNodeHandlerOptions & WebframezReactBuildTarget;
+export function getRegisteredReactBuildTargets(): WebframezReactBuildTarget[];
+export function clearRegisteredReactBuildTargets(): void;

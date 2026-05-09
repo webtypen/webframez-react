@@ -3,6 +3,12 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn, type ChildProcess } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import {
+  brotliCompressSync,
+  createBrotliCompress,
+  createGzip,
+  gzipSync,
+} from "node:zlib";
 import { createHTMLShell, renderRSCToString, sendRSC } from "./server";
 import { createFileRouter, parseSearchParams, renderHeadToString } from "./router";
 import type { ClientNavigationPayload, RouteRequestContext } from "./types";
@@ -33,6 +39,103 @@ function createInitialHtmlErrorMarkup(message: string) {
   return `<main style="font-family:system-ui,sans-serif;padding:24px"><h1 style="margin:0 0 12px">500</h1><p style="margin:0">${message}</p></main>`;
 }
 
+function createClientAssetVersion(distRootDir: string) {
+  try {
+    const stat = fs.statSync(path.join(distRootDir, "client.js"));
+    return `${Math.floor(stat.mtimeMs)}-${stat.size}`;
+  } catch {
+    return "";
+  }
+}
+
+function appendAssetVersion(url: string, version: string) {
+  if (!version) {
+    return url;
+  }
+
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}v=${encodeURIComponent(version)}`;
+}
+
+function isWithinDirectory(filePath: string, directory: string) {
+  return filePath === directory || filePath.startsWith(`${directory}${path.sep}`);
+}
+
+function isCompressibleAsset(ext: string) {
+  return [".js", ".mjs", ".json", ".css", ".svg", ".txt", ".html"].includes(ext);
+}
+
+function isHashedAssetPath(filePath: string) {
+  return /-[a-f0-9]{12,}\.[cm]?js$/i.test(path.basename(filePath));
+}
+
+function setAssetContentType(res: ServerResponse, ext: string) {
+  if (ext === ".js" || ext === ".mjs") {
+    res.setHeader("Content-Type", "text/javascript; charset=utf-8");
+  } else if (ext === ".json") {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+  } else if (ext === ".css") {
+    res.setHeader("Content-Type", "text/css; charset=utf-8");
+  } else if (ext === ".svg") {
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+  }
+}
+
+function getPreferredContentEncoding(req: IncomingMessage, ext: string, fileSize: number) {
+  if (!isCompressibleAsset(ext) || fileSize < 1024) {
+    return "";
+  }
+
+  const acceptEncoding = String(req.headers["accept-encoding"] || "");
+  if (/\bbr\b/.test(acceptEncoding)) {
+    return "br";
+  }
+
+  if (/\bgzip\b/.test(acceptEncoding)) {
+    return "gzip";
+  }
+
+  return "";
+}
+
+function sendTextResponse(
+  req: IncomingMessage,
+  res: ServerResponse,
+  body: string,
+  options: {
+    statusCode?: number;
+    contentType: string;
+    cacheControl?: string;
+    compress?: boolean;
+  },
+) {
+  const bodyBuffer = Buffer.from(body);
+  const contentEncoding = options.compress === false
+    ? ""
+    : getPreferredContentEncoding(req, ".html", bodyBuffer.length);
+
+  res.statusCode = options.statusCode ?? 200;
+  res.setHeader("Content-Type", options.contentType);
+  if (options.cacheControl) {
+    res.setHeader("Cache-Control", options.cacheControl);
+  }
+  res.setHeader("Vary", "Accept-Encoding");
+
+  if (contentEncoding === "br") {
+    res.setHeader("Content-Encoding", "br");
+    res.end(brotliCompressSync(bodyBuffer));
+    return;
+  }
+
+  if (contentEncoding === "gzip") {
+    res.setHeader("Content-Encoding", "gzip");
+    res.end(gzipSync(bodyBuffer));
+    return;
+  }
+
+  res.end(bodyBuffer);
+}
+
 type InitialHtmlFlightPayload = {
   flightData: string;
   moduleMap: Record<string, { "*": { id: string | number; chunks?: Array<string | number>; name?: string; async?: boolean } }>;
@@ -57,6 +160,7 @@ type InitialHtmlWorkerResponse =
     };
 
 const INITIAL_HTML_WORKER_SCRIPT = `
+const fs = require("node:fs");
 const path = require("node:path");
 const Module = require("node:module");
 const { Readable, Writable } = require("node:stream");
@@ -106,9 +210,40 @@ const reactDomServer = require(path.join(path.dirname(reactDomPkg), "server.node
 globalThis.__webpack_chunk_load__ = function __webframezNoopChunkLoad() {
   return Promise.resolve();
 };
+function normalizeWebframezRequireCandidate(candidate) {
+  const stagingMarker = path.join(".webframez-build", "");
+  const appMarker = path.join("app", "");
+  const stagingIndex = candidate.indexOf(stagingMarker);
+  const appIndex = candidate.indexOf(appMarker, stagingIndex >= 0 ? stagingIndex : 0);
+  if (stagingIndex >= 0 && appIndex >= 0) {
+    const runtimeCandidate = path.resolve(process.cwd(), candidate.slice(appIndex));
+    if (fs.existsSync(runtimeCandidate)) {
+      return runtimeCandidate;
+    }
+  }
+
+  const frameworkDistDir = path.join("node_modules", "@webtypen", "webframez-react", "dist");
+  const shouldUseCjs =
+    candidate.includes(frameworkDistDir) &&
+    (candidate.endsWith(path.join("dist", "navigation.js")) ||
+      candidate.endsWith(path.join("dist", "route-slot.js")));
+
+  if (!shouldUseCjs) {
+    return candidate;
+  }
+
+  const cjsCandidate = candidate.slice(0, -3) + ".cjs";
+  return fs.existsSync(cjsCandidate) ? cjsCandidate : candidate;
+}
+
 globalThis.__webpack_require__ = function __webframezNodeRequire(id) {
   if (typeof id !== "string") {
     return require(id);
+  }
+
+  const directRequireTarget = normalizeWebframezRequireCandidate(id);
+  if (directRequireTarget !== id) {
+    return require(directRequireTarget);
   }
 
   if (id.startsWith("./")) {
@@ -118,10 +253,16 @@ globalThis.__webpack_require__ = function __webframezNodeRequire(id) {
       path.resolve(process.cwd(), "..", relativeId)
     ];
     for (const candidate of candidates) {
+      const requireTarget = normalizeWebframezRequireCandidate(candidate);
       try {
-        return require(candidate);
+        return require(requireTarget);
       } catch (error) {
-        const missingCandidate = error && error.code === "MODULE_NOT_FOUND" && typeof error.message === "string" && error.message.includes("'" + candidate + "'");
+        const missingCandidate =
+          error &&
+          error.code === "MODULE_NOT_FOUND" &&
+          typeof error.message === "string" &&
+          (error.message.includes("'" + candidate + "'") ||
+            error.message.includes("'" + requireTarget + "'"));
         if (!missingCandidate) {
           throw error;
         }
@@ -376,6 +517,26 @@ function joinRuntimeBasePath(basePath: string, pathname: string) {
   }
 
   return normalizedPath === "/" ? basePath : `${basePath}${normalizedPath}`;
+}
+
+function joinRuntimeAssetPath(basePath: string, pathname: string) {
+  const normalizedBasePath = normalizeRuntimeBasePath(basePath) ?? "";
+  const normalizedPath =
+    !pathname || pathname === "/"
+      ? "/"
+      : pathname.startsWith("/")
+        ? pathname
+        : `/${pathname}`;
+
+  if (
+    normalizedBasePath &&
+    (normalizedPath === normalizedBasePath ||
+      normalizedPath.startsWith(`${normalizedBasePath}/`))
+  ) {
+    return normalizedPath;
+  }
+
+  return joinRuntimeBasePath(normalizedBasePath, normalizedPath);
 }
 
 function sanitizeInitialHtmlWorkerNodeOptions(rawNodeOptions?: string) {
@@ -650,6 +811,25 @@ function createServerConsumerManifest(
 
   const normalizeWorkerModuleId = (requestKey: string, rawModuleId: unknown): string | null => {
     if (typeof rawModuleId === "string" && rawModuleId.trim() !== "") {
+      const isStagingModuleId =
+        rawModuleId.startsWith("./.webframez-build/") ||
+        rawModuleId.includes(`${path.sep}.webframez-build${path.sep}`);
+      const isRuntimeBuildKey =
+        requestKey.startsWith("file://") ||
+        (requestKey.startsWith("/") && requestKey.includes(`${path.sep}build${path.sep}app${path.sep}`));
+
+      if (isStagingModuleId && isRuntimeBuildKey) {
+        if (requestKey.startsWith("file://")) {
+          try {
+            return fileURLToPath(requestKey);
+          } catch {
+            return rawModuleId;
+          }
+        }
+
+        return requestKey;
+      }
+
       return rawModuleId;
     }
 
@@ -745,6 +925,14 @@ function createServerConsumerManifest(
       addReference(String(entry.id), "*", reference);
       for (const exportName of exportNames) {
         addReference(String(entry.id), exportName, {
+          ...reference,
+          name: exportName,
+        });
+      }
+    } else if (typeof entry.id === "string" && entry.id.trim() !== "") {
+      addReference(entry.id, "*", reference);
+      for (const exportName of exportNames) {
+        addReference(entry.id, exportName, {
           ...reference,
           name: exportName,
         });
@@ -875,26 +1063,56 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
     if (url.pathname.startsWith(assetsPrefix)) {
       const relative = url.pathname.slice(assetsPrefix.length);
       const filePath = path.resolve(distRootDir, relative);
-      if (!filePath.startsWith(distRootDir)) {
+      if (!isWithinDirectory(filePath, distRootDir)) {
         res.statusCode = 400;
         res.end("Invalid path");
         return;
       }
 
       const ext = path.extname(filePath);
-      if (ext === ".js" || ext === ".mjs") {
-        res.setHeader("Content-Type", "text/javascript; charset=utf-8");
-      } else if (ext === ".json") {
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-      }
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-
-      const stream = fs.createReadStream(filePath);
-      stream.on("error", () => {
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(filePath);
+        if (!stat.isFile()) {
+          throw new Error("Asset path is not a file");
+        }
+      } catch {
         res.statusCode = 404;
         res.end("Not found");
+        return;
+      }
+
+      setAssetContentType(res, ext);
+      const isDevelopmentAsset = nodeEnv !== "production";
+      const isVersionedClientAsset = path.basename(filePath) === "client.js" && url.searchParams.has("v");
+      const canCacheLongTerm = !isDevelopmentAsset && (isHashedAssetPath(filePath) || isVersionedClientAsset);
+      res.setHeader(
+        "Cache-Control",
+        canCacheLongTerm
+          ? "public, max-age=31536000, immutable"
+          : "no-store, no-cache, must-revalidate, proxy-revalidate",
+      );
+      res.setHeader("Vary", "Accept-Encoding");
+
+      const contentEncoding = !isDevelopmentAsset
+        ? getPreferredContentEncoding(req, ext, stat.size)
+        : "";
+      const stream = fs.createReadStream(filePath);
+      stream.on("error", () => {
+        if (!res.headersSent) {
+          res.statusCode = 404;
+        }
+        res.end("Not found");
       });
-      stream.pipe(res);
+      if (contentEncoding === "br") {
+        res.setHeader("Content-Encoding", "br");
+        stream.pipe(createBrotliCompress()).pipe(res);
+      } else if (contentEncoding === "gzip") {
+        res.setHeader("Content-Encoding", "gzip");
+        stream.pipe(createGzip()).pipe(res);
+      } else {
+        stream.pipe(res);
+      }
       return;
     }
 
@@ -912,8 +1130,6 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
     );
     const initialPayload: ClientNavigationPayload = {
       model: resolved.model,
-      contextModel: resolved.contextModel,
-      pageModel: resolved.pageModel,
       head: resolved.head,
     };
     const initialFlightData = await renderRSCToString(initialPayload, {
@@ -923,9 +1139,12 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       normalizeRuntimeBasePath(resolved.head.transportBasePath) ??
       normalizeRuntimeBasePath(basePath) ??
       "";
-    const shellClientScriptUrl = joinRuntimeBasePath(
-      transportBasePath,
-      "/assets/client.js",
+    const shellClientScriptUrl = appendAssetVersion(
+      joinRuntimeAssetPath(
+        transportBasePath,
+        clientScriptUrl,
+      ),
+      createClientAssetVersion(distRootDir),
     );
     const shellRscEndpoint = joinRuntimeBasePath(transportBasePath, "/rsc");
     const shellBasename =
@@ -934,7 +1153,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       "";
     const shellRouteBasePath =
       normalizeRuntimeBasePath(resolved.head.routeBasePath) ?? "";
-    let rootHtml = "";
+    let rootHtml: string;
     try {
       rootHtml = await initialHtmlWorker.renderFromFlightData({
         flightData: initialFlightData,
@@ -958,30 +1177,24 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
           });
         } catch (flightRenderError) {
           console.error("[webframez-react] Flight-to-HTML render failed", flightRenderError);
-          res.statusCode = 500;
-          res.setHeader("Content-Type", "text/html");
-          res.end(
-            createHTMLShell({
-              title: "500 - Initial HTML render failed",
-              headTags: "",
-              clientScriptUrl: shellClientScriptUrl,
-              rscEndpoint: shellRscEndpoint,
-              rootHtml: createInitialHtmlErrorMarkup("Initial HTML render failed."),
-              initialFlightData,
-              basename: shellBasename,
-              routeBasePath: shellRouteBasePath,
-              liveReloadPath: liveReloadPath || undefined,
-              liveReloadServerId: liveReloadPath ? devServerId : undefined,
-            }),
+          sendTextResponse(
+            req,
+            res,
+            createInitialHtmlErrorMarkup("Failed to render initial React HTML."),
+            {
+              statusCode: 500,
+              contentType: "text/html; charset=utf-8",
+              compress: nodeEnv === "production",
+            },
           );
           return;
         }
       }
     }
 
-    res.statusCode = resolved.statusCode;
-    res.setHeader("Content-Type", "text/html");
-    res.end(
+    sendTextResponse(
+      req,
+      res,
       createHTMLShell({
         title: resolved.head.title || "Webframez React",
         headTags: renderHeadToString(resolved.head),
@@ -993,7 +1206,13 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         routeBasePath: shellRouteBasePath,
         liveReloadPath: liveReloadPath || undefined,
         liveReloadServerId: liveReloadPath ? devServerId : undefined,
-      })
+      }),
+      {
+        statusCode: resolved.statusCode,
+        contentType: "text/html; charset=utf-8",
+        cacheControl: "no-store, no-cache, must-revalidate, proxy-revalidate",
+        compress: nodeEnv === "production",
+      },
     );
   };
 }

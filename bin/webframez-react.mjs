@@ -4,16 +4,18 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const binFilePath = fileURLToPath(import.meta.url);
 const packageRoot = path.resolve(path.dirname(binFilePath), "..");
 const projectRoot = process.cwd();
+const require = createRequire(import.meta.url);
 
 const command = process.argv[2];
 const passthroughStart = process.argv[3] === "--" ? 4 : 3;
 const passthroughArgs = process.argv.slice(passthroughStart);
-const customArgPrefixes = ["--client-entry", "--server-entry"];
+const customArgPrefixes = ["--client-entry", "--server-entry", "--routes", "--out-dir", "--runtime-out-dir"];
 
 function printHelp() {
   console.log(
@@ -25,6 +27,8 @@ function printHelp() {
       "  webframez-react watch:server",
       "  webframez-react build:client",
       "  webframez-react watch:client",
+      "  webframez-react build:routes --routes=dist/app/routes.js --out-dir=dist",
+      "  webframez-react watch:routes --routes=dist/app/routes.js --out-dir=dist",
       "  webframez-react build:server:webpack",
       "  webframez-react watch:server:webpack",
       "  webframez-react exec -- <command> [args...]",
@@ -44,6 +48,9 @@ function printHelp() {
       "Optional CLI overrides:",
       "  --client-entry=src/client.tsx",
       "  --server-entry=src/server.ts",
+      "  --routes=dist/app/routes.js",
+      "  --out-dir=dist",
+      "  --runtime-out-dir=dist",
     ].join("\n"),
   );
 }
@@ -68,6 +75,14 @@ function readCustomArg(name) {
     }
   }
   return null;
+}
+
+function requireCustomArg(name, description) {
+  const value = readCustomArg(name);
+  if (!value) {
+    throw new Error(`Missing ${description || name}.`);
+  }
+  return value;
 }
 
 function stripCustomArgs(args) {
@@ -119,6 +134,55 @@ function resolveBinary(name) {
 function buildReactServerNodeOptions() {
   const existing = process.env.NODE_OPTIONS ? `${process.env.NODE_OPTIONS} ` : "";
   return `${existing}--conditions react-server -r @webtypen/webframez-react/register`.trim();
+}
+
+function hasReactServerCondition() {
+  if (process.execArgv.includes("--conditions=react-server")) {
+    return true;
+  }
+
+  for (let index = 0; index < process.execArgv.length; index += 1) {
+    if (process.execArgv[index] === "--conditions" && process.execArgv[index + 1] === "react-server") {
+      return true;
+    }
+  }
+
+  return /\b--conditions(?:=|\s+)react-server\b/.test(process.env.NODE_OPTIONS || "");
+}
+
+async function reexecWithReactServerConditionIfNeeded() {
+  if (
+    (command !== "build:routes" && command !== "watch:routes") ||
+    hasReactServerCondition() ||
+    process.env.WEBFRAMEZ_REACT_CLI_REEXEC === "1"
+  ) {
+    return false;
+  }
+
+  const child = spawn(process.execPath, [
+    "--conditions",
+    "react-server",
+    "--require",
+    path.resolve(packageRoot, "register.cjs"),
+    binFilePath,
+    ...process.argv.slice(2),
+  ], {
+    cwd: projectRoot,
+    stdio: "inherit",
+    shell: false,
+    env: {
+      ...process.env,
+      WEBFRAMEZ_REACT_CLI_REEXEC: "1",
+    },
+  });
+
+  const code = await new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (exitCode) => resolve(exitCode || 0));
+  });
+
+  process.exit(code);
+  return true;
 }
 
 async function loadProjectConfig() {
@@ -216,9 +280,267 @@ function run(binaryName, args, envAdditions = {}) {
   });
 }
 
+function start(binaryName, args, envAdditions = {}) {
+  const binary = resolveBinary(binaryName);
+
+  return spawn(binary, args, {
+    cwd: projectRoot,
+    stdio: "inherit",
+    shell: false,
+    env: {
+      ...process.env,
+      ...envAdditions,
+    },
+  });
+}
+
+function fileExists(filePath) {
+  return fs.existsSync(filePath);
+}
+
+function mapTargetPath(value, fromRoot, toRoot) {
+  if (!value) {
+    return value;
+  }
+
+  const relative = path.relative(fromRoot, value);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    return value;
+  }
+
+  return path.resolve(toRoot, relative);
+}
+
+async function loadRouteBuildTargets(routesPath, outDir, runtimeOutDir) {
+  const coreModulePath = path.resolve(packageRoot, "dist", "webframez-core.cjs");
+  const core = require(coreModulePath);
+  const Module = require("node:module");
+  const originalLoad = Module._load;
+  const previousOutDir = process.env.WEBFRAMEZ_REACT_OUT_DIR;
+  const previousCaptureRoutes = process.env.WEBFRAMEZ_REACT_CAPTURE_ROUTES;
+  const fakeRoute = {
+    extend(name, factory) {
+      this[name] = factory(this);
+      return this;
+    },
+    group(_options, callback) {
+      if (typeof callback === "function") {
+        callback();
+      }
+    },
+    get() {},
+    post() {},
+    put() {},
+    delete() {},
+  };
+
+  process.env.WEBFRAMEZ_REACT_OUT_DIR = runtimeOutDir;
+  process.env.WEBFRAMEZ_REACT_CAPTURE_ROUTES = "1";
+  core.clearRegisteredReactBuildTargets();
+  Module._load = function webframezReactCaptureModuleLoad(request, parent, isMain) {
+    if (request === "@webtypen/webframez-react") {
+      return require(path.resolve(packageRoot, "dist", "index.cjs"));
+    }
+    if (request === "@webtypen/webframez-react/http") {
+      return require(path.resolve(packageRoot, "dist", "http.cjs"));
+    }
+    if (request === "@webtypen/webframez-react/webframez-core") {
+      return require(path.resolve(packageRoot, "dist", "webframez-core.cjs"));
+    }
+    if (request === "@webtypen/webframez-react/navigation") {
+      return require(path.resolve(packageRoot, "dist", "navigation.cjs"));
+    }
+    if (request === "@webtypen/webframez-react/route-slot") {
+      return require(path.resolve(packageRoot, "dist", "route-slot.cjs"));
+    }
+    if (request === "@webtypen/webframez-react/client") {
+      return require(path.resolve(packageRoot, "dist", "client.cjs"));
+    }
+
+    if (
+      request === "@webtypen/webframez-core" ||
+      request === "webframez-core" ||
+      request === "@webtypen/webframez-core/dist/Router/Route" ||
+      request === "webframez-core/dist/Router/Route"
+    ) {
+      return {
+        Route: fakeRoute,
+      };
+    }
+
+    return originalLoad.call(this, request, parent, isMain);
+  };
+
+  try {
+    const resolvedRoutesPath = path.resolve(projectRoot, routesPath);
+    await import(pathToFileURL(resolvedRoutesPath).href);
+    return core.getRegisteredReactBuildTargets().map((target) => ({
+      ...target,
+      runtimeDistRootDir: target.distRootDir,
+      runtimePagesDir: target.pagesDir,
+      runtimeManifestPath: target.manifestPath,
+      distRootDir: mapTargetPath(target.distRootDir, runtimeOutDir, outDir),
+      pagesDir: mapTargetPath(target.pagesDir, runtimeOutDir, outDir),
+      manifestPath: mapTargetPath(target.manifestPath, runtimeOutDir, outDir),
+    }));
+  } finally {
+    Module._load = originalLoad;
+    if (previousOutDir === undefined) {
+      delete process.env.WEBFRAMEZ_REACT_OUT_DIR;
+    } else {
+      process.env.WEBFRAMEZ_REACT_OUT_DIR = previousOutDir;
+    }
+    if (previousCaptureRoutes === undefined) {
+      delete process.env.WEBFRAMEZ_REACT_CAPTURE_ROUTES;
+    } else {
+      process.env.WEBFRAMEZ_REACT_CAPTURE_ROUTES = previousCaptureRoutes;
+    }
+  }
+}
+
+async function waitForFile(filePath) {
+  const startedAt = Date.now();
+
+  while (!fileExists(filePath)) {
+    if (Date.now() - startedAt > 30000) {
+      throw new Error(`Timed out waiting for ${filePath}.`);
+    }
+
+    console.log(`[webframez-react] waiting for routes file: ${filePath}`);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+
+async function buildRouteStyles(target) {
+  if (!target.styleSrcPath || !fileExists(target.styleSrcPath)) {
+    return 0;
+  }
+
+  const outputDir = path.join(target.distRootDir, "scss");
+  await fsp.mkdir(outputDir, { recursive: true });
+  console.log(`[webframez-react] sass: ${target.styleSrcPath} -> ${outputDir}`);
+
+  return run("sass", ["--no-source-map", `${target.styleSrcPath}:${outputDir}`]);
+}
+
+async function buildRouteClient(target, passthroughArgsClean) {
+  const config = {
+    path: path.resolve(packageRoot, "defaults", "webpack.client.cjs"),
+    source: "package",
+  };
+  const clientEntry = target.clientEntryPath || path.resolve(packageRoot, "defaults", "default-client.js");
+
+  console.log(`[webframez-react] route: ${target.path}`);
+  console.log(`[webframez-react] webpack config (${config.source}): ${config.path}`);
+  console.log(`[webframez-react] pages: ${target.pagesDir}`);
+  console.log(`[webframez-react] dist: ${target.distRootDir}`);
+  console.log(`[webframez-react] client entry: ${clientEntry}`);
+
+  return run(
+    "webpack",
+    ["--config", config.path, ...passthroughArgsClean],
+    {
+      WEBFRAMEZ_REACT_CLIENT_ENTRY: clientEntry,
+      WEBFRAMEZ_REACT_DIST_ROOT_DIR: target.distRootDir,
+      WEBFRAMEZ_REACT_PAGES_DIR: target.pagesDir,
+      WEBFRAMEZ_REACT_RUNTIME_DIST_ROOT_DIR: target.runtimeDistRootDir || target.distRootDir,
+      WEBFRAMEZ_REACT_RUNTIME_PAGES_DIR: target.runtimePagesDir || target.pagesDir,
+    },
+  );
+}
+
+function watchRouteStyles(target) {
+  if (!target.styleSrcPath || !fileExists(target.styleSrcPath)) {
+    return null;
+  }
+
+  const outputDir = path.join(target.distRootDir, "scss");
+  fs.mkdirSync(outputDir, { recursive: true });
+  console.log(`[webframez-react] sass watch: ${target.styleSrcPath} -> ${outputDir}`);
+
+  return start("sass", ["--watch", "--poll", "--no-source-map", `${target.styleSrcPath}:${outputDir}`]);
+}
+
+function watchRouteClient(target, passthroughArgsClean) {
+  const config = {
+    path: path.resolve(packageRoot, "defaults", "webpack.client.cjs"),
+    source: "package",
+  };
+  const clientEntry = target.clientEntryPath || path.resolve(packageRoot, "defaults", "default-client.js");
+  const args = ["--config", config.path, ...passthroughArgsClean];
+
+  if (!args.includes("--watch")) {
+    args.push("--watch");
+  }
+
+  console.log(`[webframez-react] route watch: ${target.path}`);
+  console.log(`[webframez-react] webpack config (${config.source}): ${config.path}`);
+  console.log(`[webframez-react] pages: ${target.pagesDir}`);
+  console.log(`[webframez-react] dist: ${target.distRootDir}`);
+  console.log(`[webframez-react] client entry: ${clientEntry}`);
+
+  return start("webpack", args, {
+    WEBFRAMEZ_REACT_CLIENT_ENTRY: clientEntry,
+    WEBFRAMEZ_REACT_DIST_ROOT_DIR: target.distRootDir,
+    WEBFRAMEZ_REACT_PAGES_DIR: target.pagesDir,
+    WEBFRAMEZ_REACT_RUNTIME_DIST_ROOT_DIR: target.runtimeDistRootDir || target.distRootDir,
+    WEBFRAMEZ_REACT_RUNTIME_PAGES_DIR: target.runtimePagesDir || target.pagesDir,
+  });
+}
+
+async function watchRouteTargets(targets, passthroughArgsClean) {
+  const children = [];
+
+  for (const target of targets) {
+    const styleChild = watchRouteStyles(target);
+    if (styleChild) {
+      children.push(styleChild);
+    }
+
+    children.push(watchRouteClient(target, passthroughArgsClean));
+  }
+
+  if (children.length === 0) {
+    return;
+  }
+
+  await new Promise((resolve, reject) => {
+    for (const child of children) {
+      child.on("error", reject);
+      child.on("close", (code) => {
+        if (code && code !== 0) {
+          reject(new Error(`[webframez-react] watch child exited with code ${code}.`));
+          return;
+        }
+
+        resolve();
+      });
+    }
+  });
+}
+
+async function validateRouteBuild(target) {
+  const requiredFiles = [
+    path.join(target.distRootDir, "client.js"),
+    path.join(target.distRootDir, "react-client-manifest.json"),
+    path.join(target.distRootDir, "react-ssr-manifest.json"),
+  ];
+
+  const missing = requiredFiles.filter((filePath) => !fileExists(filePath));
+  if (missing.length > 0) {
+    throw new Error(
+      `Route ${target.path} build is incomplete. Missing: ${missing.join(", ")}`,
+    );
+  }
+}
+
 async function main() {
   if (!command || command === "--help" || command === "-h") {
     printHelp();
+    return;
+  }
+
+  if (await reexecWithReactServerConditionIfNeeded()) {
     return;
   }
 
@@ -277,6 +599,41 @@ async function main() {
       NODE_OPTIONS: buildReactServerNodeOptions(),
     });
     process.exit(code);
+    return;
+  }
+
+  if (command === "build:routes" || command === "watch:routes") {
+    const routesPath = requireCustomArg("--routes", "--routes=<compiled routes file>");
+    const outDir = path.resolve(projectRoot, readCustomArg("--out-dir") || "dist");
+    const runtimeOutDir = path.resolve(projectRoot, readCustomArg("--runtime-out-dir") || outDir);
+    await waitForFile(path.resolve(projectRoot, routesPath));
+    const targets = await loadRouteBuildTargets(routesPath, outDir, runtimeOutDir);
+
+    if (targets.length === 0) {
+      throw new Error(`[webframez-react] No React routes were registered by ${routesPath}.`);
+    }
+
+    if (command === "watch:routes") {
+      await watchRouteTargets(targets, passthroughArgsClean);
+      return;
+    }
+
+    for (const target of targets) {
+      const sassCode = await buildRouteStyles(target);
+      if (sassCode !== 0) {
+        process.exit(sassCode);
+        return;
+      }
+
+      const webpackCode = await buildRouteClient(target, passthroughArgsClean);
+      if (webpackCode !== 0) {
+        process.exit(webpackCode);
+        return;
+      }
+
+      await validateRouteBuild(target);
+    }
+
     return;
   }
 

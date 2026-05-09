@@ -63,6 +63,12 @@
       "import": "./dist/webframez-core.js",
       "require": "./dist/webframez-core.cjs"
     },
+    "./build-plugin": {
+      "types": "./dist/build-plugin.d.ts",
+      "import": "./dist/build-plugin.js",
+      "require": "./dist/build-plugin.cjs"
+    },
+    "./default-client": "./defaults/default-client.js",
     "./register": "./register.cjs",
     "./defaults/webpack.client": "./defaults/webpack.client.cjs",
     "./defaults/webpack.server": "./defaults/webpack.server.cjs",
@@ -76,6 +82,9 @@
     "bin",
     "register.cjs"
   ],
+  "webframez": {
+    "plugin": "./dist/build-plugin.cjs"
+  },
   "scripts": {
     "clean": "rm -rf dist",
     "build": "npm run clean && node scripts/build.mjs",

@@ -29,16 +29,21 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/webframez-core.ts
 var webframez_core_exports = {};
 __export(webframez_core_exports, {
+  clearRegisteredReactBuildTargets: () => clearRegisteredReactBuildTargets,
+  getRegisteredReactBuildTargets: () => getRegisteredReactBuildTargets,
   initWebframezReact: () => initWebframezReact,
+  resolveWebframezReactRouteOptions: () => resolveWebframezReactRouteOptions,
   setupWebframezCoreReactRoute: () => setupWebframezCoreReactRoute
 });
 module.exports = __toCommonJS(webframez_core_exports);
+var import_node_path4 = __toESM(require("node:path"), 1);
 
 // src/http.ts
 var import_node_fs2 = __toESM(require("node:fs"), 1);
 var import_node_path3 = __toESM(require("node:path"), 1);
 var import_node_url = require("node:url");
 var import_node_child_process = require("node:child_process");
+var import_node_zlib = require("node:zlib");
 
 // src/server.ts
 var import_node_path = __toESM(require("node:path"), 1);
@@ -795,7 +800,77 @@ function parseSearchParams(query) {
 function createInitialHtmlErrorMarkup(message) {
   return `<main style="font-family:system-ui,sans-serif;padding:24px"><h1 style="margin:0 0 12px">500</h1><p style="margin:0">${message}</p></main>`;
 }
+function createClientAssetVersion(distRootDir) {
+  try {
+    const stat = import_node_fs2.default.statSync(import_node_path3.default.join(distRootDir, "client.js"));
+    return `${Math.floor(stat.mtimeMs)}-${stat.size}`;
+  } catch {
+    return "";
+  }
+}
+function appendAssetVersion(url, version) {
+  if (!version) {
+    return url;
+  }
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}v=${encodeURIComponent(version)}`;
+}
+function isWithinDirectory(filePath, directory) {
+  return filePath === directory || filePath.startsWith(`${directory}${import_node_path3.default.sep}`);
+}
+function isCompressibleAsset(ext) {
+  return [".js", ".mjs", ".json", ".css", ".svg", ".txt", ".html"].includes(ext);
+}
+function isHashedAssetPath(filePath) {
+  return /-[a-f0-9]{12,}\.[cm]?js$/i.test(import_node_path3.default.basename(filePath));
+}
+function setAssetContentType(res, ext) {
+  if (ext === ".js" || ext === ".mjs") {
+    res.setHeader("Content-Type", "text/javascript; charset=utf-8");
+  } else if (ext === ".json") {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+  } else if (ext === ".css") {
+    res.setHeader("Content-Type", "text/css; charset=utf-8");
+  } else if (ext === ".svg") {
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+  }
+}
+function getPreferredContentEncoding(req, ext, fileSize) {
+  if (!isCompressibleAsset(ext) || fileSize < 1024) {
+    return "";
+  }
+  const acceptEncoding = String(req.headers["accept-encoding"] || "");
+  if (/\bbr\b/.test(acceptEncoding)) {
+    return "br";
+  }
+  if (/\bgzip\b/.test(acceptEncoding)) {
+    return "gzip";
+  }
+  return "";
+}
+function sendTextResponse(req, res, body, options) {
+  const bodyBuffer = Buffer.from(body);
+  const contentEncoding = options.compress === false ? "" : getPreferredContentEncoding(req, ".html", bodyBuffer.length);
+  res.statusCode = options.statusCode ?? 200;
+  res.setHeader("Content-Type", options.contentType);
+  if (options.cacheControl) {
+    res.setHeader("Cache-Control", options.cacheControl);
+  }
+  res.setHeader("Vary", "Accept-Encoding");
+  if (contentEncoding === "br") {
+    res.setHeader("Content-Encoding", "br");
+    res.end((0, import_node_zlib.brotliCompressSync)(bodyBuffer));
+    return;
+  }
+  if (contentEncoding === "gzip") {
+    res.setHeader("Content-Encoding", "gzip");
+    res.end((0, import_node_zlib.gzipSync)(bodyBuffer));
+    return;
+  }
+  res.end(bodyBuffer);
+}
 var INITIAL_HTML_WORKER_SCRIPT = `
+const fs = require("node:fs");
 const path = require("node:path");
 const Module = require("node:module");
 const { Readable, Writable } = require("node:stream");
@@ -845,9 +920,40 @@ const reactDomServer = require(path.join(path.dirname(reactDomPkg), "server.node
 globalThis.__webpack_chunk_load__ = function __webframezNoopChunkLoad() {
   return Promise.resolve();
 };
+function normalizeWebframezRequireCandidate(candidate) {
+  const stagingMarker = path.join(".webframez-build", "");
+  const appMarker = path.join("app", "");
+  const stagingIndex = candidate.indexOf(stagingMarker);
+  const appIndex = candidate.indexOf(appMarker, stagingIndex >= 0 ? stagingIndex : 0);
+  if (stagingIndex >= 0 && appIndex >= 0) {
+    const runtimeCandidate = path.resolve(process.cwd(), candidate.slice(appIndex));
+    if (fs.existsSync(runtimeCandidate)) {
+      return runtimeCandidate;
+    }
+  }
+
+  const frameworkDistDir = path.join("node_modules", "@webtypen", "webframez-react", "dist");
+  const shouldUseCjs =
+    candidate.includes(frameworkDistDir) &&
+    (candidate.endsWith(path.join("dist", "navigation.js")) ||
+      candidate.endsWith(path.join("dist", "route-slot.js")));
+
+  if (!shouldUseCjs) {
+    return candidate;
+  }
+
+  const cjsCandidate = candidate.slice(0, -3) + ".cjs";
+  return fs.existsSync(cjsCandidate) ? cjsCandidate : candidate;
+}
+
 globalThis.__webpack_require__ = function __webframezNodeRequire(id) {
   if (typeof id !== "string") {
     return require(id);
+  }
+
+  const directRequireTarget = normalizeWebframezRequireCandidate(id);
+  if (directRequireTarget !== id) {
+    return require(directRequireTarget);
   }
 
   if (id.startsWith("./")) {
@@ -857,10 +963,16 @@ globalThis.__webpack_require__ = function __webframezNodeRequire(id) {
       path.resolve(process.cwd(), "..", relativeId)
     ];
     for (const candidate of candidates) {
+      const requireTarget = normalizeWebframezRequireCandidate(candidate);
       try {
-        return require(candidate);
+        return require(requireTarget);
       } catch (error) {
-        const missingCandidate = error && error.code === "MODULE_NOT_FOUND" && typeof error.message === "string" && error.message.includes("'" + candidate + "'");
+        const missingCandidate =
+          error &&
+          error.code === "MODULE_NOT_FOUND" &&
+          typeof error.message === "string" &&
+          (error.message.includes("'" + candidate + "'") ||
+            error.message.includes("'" + requireTarget + "'"));
         if (!missingCandidate) {
           throw error;
         }
@@ -1082,6 +1194,14 @@ function joinRuntimeBasePath(basePath, pathname) {
   }
   return normalizedPath === "/" ? basePath : `${basePath}${normalizedPath}`;
 }
+function joinRuntimeAssetPath(basePath, pathname) {
+  const normalizedBasePath = normalizeRuntimeBasePath(basePath) ?? "";
+  const normalizedPath = !pathname || pathname === "/" ? "/" : pathname.startsWith("/") ? pathname : `/${pathname}`;
+  if (normalizedBasePath && (normalizedPath === normalizedBasePath || normalizedPath.startsWith(`${normalizedBasePath}/`))) {
+    return normalizedPath;
+  }
+  return joinRuntimeBasePath(normalizedBasePath, normalizedPath);
+}
 function sanitizeInitialHtmlWorkerNodeOptions(rawNodeOptions) {
   if (!rawNodeOptions || rawNodeOptions.trim() === "") {
     return "";
@@ -1276,6 +1396,18 @@ function createServerConsumerManifest(manifest) {
   const consumerManifest = {};
   const normalizeWorkerModuleId = (requestKey, rawModuleId) => {
     if (typeof rawModuleId === "string" && rawModuleId.trim() !== "") {
+      const isStagingModuleId = rawModuleId.startsWith("./.webframez-build/") || rawModuleId.includes(`${import_node_path3.default.sep}.webframez-build${import_node_path3.default.sep}`);
+      const isRuntimeBuildKey = requestKey.startsWith("file://") || requestKey.startsWith("/") && requestKey.includes(`${import_node_path3.default.sep}build${import_node_path3.default.sep}app${import_node_path3.default.sep}`);
+      if (isStagingModuleId && isRuntimeBuildKey) {
+        if (requestKey.startsWith("file://")) {
+          try {
+            return (0, import_node_url.fileURLToPath)(requestKey);
+          } catch {
+            return rawModuleId;
+          }
+        }
+        return requestKey;
+      }
       return rawModuleId;
     }
     if (typeof rawModuleId !== "number" || !Number.isFinite(rawModuleId)) {
@@ -1353,6 +1485,14 @@ function createServerConsumerManifest(manifest) {
       addReference(String(entry.id), "*", reference);
       for (const exportName of exportNames) {
         addReference(String(entry.id), exportName, {
+          ...reference,
+          name: exportName
+        });
+      }
+    } else if (typeof entry.id === "string" && entry.id.trim() !== "") {
+      addReference(entry.id, "*", reference);
+      for (const exportName of exportNames) {
+        addReference(entry.id, exportName, {
           ...reference,
           name: exportName
         });
@@ -1471,24 +1611,49 @@ function createNodeRequestHandler(options) {
     if (url.pathname.startsWith(assetsPrefix)) {
       const relative = url.pathname.slice(assetsPrefix.length);
       const filePath = import_node_path3.default.resolve(distRootDir, relative);
-      if (!filePath.startsWith(distRootDir)) {
+      if (!isWithinDirectory(filePath, distRootDir)) {
         res.statusCode = 400;
         res.end("Invalid path");
         return;
       }
       const ext = import_node_path3.default.extname(filePath);
-      if (ext === ".js" || ext === ".mjs") {
-        res.setHeader("Content-Type", "text/javascript; charset=utf-8");
-      } else if (ext === ".json") {
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-      }
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-      const stream = import_node_fs2.default.createReadStream(filePath);
-      stream.on("error", () => {
+      let stat;
+      try {
+        stat = import_node_fs2.default.statSync(filePath);
+        if (!stat.isFile()) {
+          throw new Error("Asset path is not a file");
+        }
+      } catch {
         res.statusCode = 404;
         res.end("Not found");
+        return;
+      }
+      setAssetContentType(res, ext);
+      const isDevelopmentAsset = nodeEnv !== "production";
+      const isVersionedClientAsset = import_node_path3.default.basename(filePath) === "client.js" && url.searchParams.has("v");
+      const canCacheLongTerm = !isDevelopmentAsset && (isHashedAssetPath(filePath) || isVersionedClientAsset);
+      res.setHeader(
+        "Cache-Control",
+        canCacheLongTerm ? "public, max-age=31536000, immutable" : "no-store, no-cache, must-revalidate, proxy-revalidate"
+      );
+      res.setHeader("Vary", "Accept-Encoding");
+      const contentEncoding = !isDevelopmentAsset ? getPreferredContentEncoding(req, ext, stat.size) : "";
+      const stream = import_node_fs2.default.createReadStream(filePath);
+      stream.on("error", () => {
+        if (!res.headersSent) {
+          res.statusCode = 404;
+        }
+        res.end("Not found");
       });
-      stream.pipe(res);
+      if (contentEncoding === "br") {
+        res.setHeader("Content-Encoding", "br");
+        stream.pipe((0, import_node_zlib.createBrotliCompress)()).pipe(res);
+      } else if (contentEncoding === "gzip") {
+        res.setHeader("Content-Encoding", "gzip");
+        stream.pipe((0, import_node_zlib.createGzip)()).pipe(res);
+      } else {
+        stream.pipe(res);
+      }
       return;
     }
     const resolved = await withRequestBasename(
@@ -1506,22 +1671,23 @@ function createNodeRequestHandler(options) {
     );
     const initialPayload = {
       model: resolved.model,
-      contextModel: resolved.contextModel,
-      pageModel: resolved.pageModel,
       head: resolved.head
     };
     const initialFlightData = await renderRSCToString(initialPayload, {
       moduleMap
     });
     const transportBasePath = normalizeRuntimeBasePath(resolved.head.transportBasePath) ?? normalizeRuntimeBasePath(basePath) ?? "";
-    const shellClientScriptUrl = joinRuntimeBasePath(
-      transportBasePath,
-      "/assets/client.js"
+    const shellClientScriptUrl = appendAssetVersion(
+      joinRuntimeAssetPath(
+        transportBasePath,
+        clientScriptUrl
+      ),
+      createClientAssetVersion(distRootDir)
     );
     const shellRscEndpoint = joinRuntimeBasePath(transportBasePath, "/rsc");
     const shellBasename = normalizeRuntimeBasePath(resolved.head.basename) ?? normalizeRuntimeBasePath(basePath) ?? "";
     const shellRouteBasePath = normalizeRuntimeBasePath(resolved.head.routeBasePath) ?? "";
-    let rootHtml = "";
+    let rootHtml;
     try {
       rootHtml = await initialHtmlWorker.renderFromFlightData({
         flightData: initialFlightData,
@@ -1545,29 +1711,23 @@ function createNodeRequestHandler(options) {
           });
         } catch (flightRenderError) {
           console.error("[webframez-react] Flight-to-HTML render failed", flightRenderError);
-          res.statusCode = 500;
-          res.setHeader("Content-Type", "text/html");
-          res.end(
-            createHTMLShell({
-              title: "500 - Initial HTML render failed",
-              headTags: "",
-              clientScriptUrl: shellClientScriptUrl,
-              rscEndpoint: shellRscEndpoint,
-              rootHtml: createInitialHtmlErrorMarkup("Initial HTML render failed."),
-              initialFlightData,
-              basename: shellBasename,
-              routeBasePath: shellRouteBasePath,
-              liveReloadPath: liveReloadPath || void 0,
-              liveReloadServerId: liveReloadPath ? devServerId : void 0
-            })
+          sendTextResponse(
+            req,
+            res,
+            createInitialHtmlErrorMarkup("Failed to render initial React HTML."),
+            {
+              statusCode: 500,
+              contentType: "text/html; charset=utf-8",
+              compress: nodeEnv === "production"
+            }
           );
           return;
         }
       }
     }
-    res.statusCode = resolved.statusCode;
-    res.setHeader("Content-Type", "text/html");
-    res.end(
+    sendTextResponse(
+      req,
+      res,
       createHTMLShell({
         title: resolved.head.title || "Webframez React",
         headTags: renderHeadToString(resolved.head),
@@ -1579,14 +1739,20 @@ function createNodeRequestHandler(options) {
         routeBasePath: shellRouteBasePath,
         liveReloadPath: liveReloadPath || void 0,
         liveReloadServerId: liveReloadPath ? devServerId : void 0
-      })
+      }),
+      {
+        statusCode: resolved.statusCode,
+        contentType: "text/html; charset=utf-8",
+        cacheControl: "no-store, no-cache, must-revalidate, proxy-revalidate",
+        compress: nodeEnv === "production"
+      }
     );
   };
 }
 
 // src/webframez-core.ts
-function normalizeMountPath(path4) {
-  const trimmed = (path4 || "").trim();
+function normalizeMountPath(path5) {
+  const trimmed = (path5 || "").trim();
   let normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   if (normalized.endsWith("/**")) {
     normalized = normalized.slice(0, -3);
@@ -1598,12 +1764,57 @@ function normalizeMountPath(path4) {
   }
   return normalized || "/";
 }
-function buildRenderDefaults(path4) {
-  const mountPath = normalizeMountPath(path4);
+var REGISTRY_KEY = "__WEBFRAMEZ_REACT_BUILD_TARGETS__";
+function getBuildTargetsRegistry() {
+  const globalWithRegistry = globalThis;
+  if (!globalWithRegistry[REGISTRY_KEY]) {
+    globalWithRegistry[REGISTRY_KEY] = [];
+  }
+  return globalWithRegistry[REGISTRY_KEY];
+}
+function toRouteKey(mountPath) {
+  const trimmed = mountPath.replace(/^\/+|\/+$/g, "");
+  return trimmed || "root";
+}
+function toPascalCase(value) {
+  return value.split(/[^A-Za-z0-9]+/).filter(Boolean).map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`).join("");
+}
+function getOutputRoot() {
+  const configured = process.env.WEBFRAMEZ_REACT_OUT_DIR;
+  if (configured) {
+    return import_node_path4.default.resolve(process.cwd(), configured);
+  }
+  const isTsNodeRuntime = process.execArgv.some((arg) => arg.includes("ts-node/register")) || process.env.TS_NODE_FILES === "true" || typeof require !== "undefined" && typeof require.extensions[".ts"] === "function";
+  if (isTsNodeRuntime && import_node_path4.default.basename(process.cwd()) !== "build") {
+    return import_node_path4.default.resolve(process.cwd(), "build");
+  }
+  return process.cwd();
+}
+function resolveFromProjectRoot(value) {
+  return import_node_path4.default.resolve(process.cwd(), value);
+}
+function resolveFromOutputRoot(value) {
+  return import_node_path4.default.resolve(getOutputRoot(), value);
+}
+function buildRenderDefaults(routePathValue) {
+  const mountPath = normalizeMountPath(routePathValue);
+  const routeKey = toRouteKey(mountPath);
+  const routeDirName = toPascalCase(routeKey) || routeKey;
   const routePath = mountPath === "/" ? "/*" : `${mountPath}/*`;
+  const srcPath = import_node_path4.default.join("app", routeDirName, "react");
+  const pagesDir = srcPath;
+  const distRootDir = import_node_path4.default.join("webframez-react", routeKey);
+  const styleSrcPath = import_node_path4.default.join("app", routeDirName, "assets", "scss");
   if (mountPath === "/") {
     return {
+      path: mountPath,
       routePath,
+      routeKey,
+      srcPath: resolveFromProjectRoot(srcPath),
+      distRootDir: resolveFromOutputRoot(distRootDir),
+      pagesDir: resolveFromOutputRoot(pagesDir),
+      manifestPath: resolveFromOutputRoot(import_node_path4.default.join(distRootDir, "react-client-manifest.json")),
+      styleSrcPath: resolveFromProjectRoot(styleSrcPath),
       basePath: void 0,
       assetsPrefix: void 0,
       rscPath: void 0,
@@ -1611,7 +1822,14 @@ function buildRenderDefaults(path4) {
     };
   }
   return {
+    path: mountPath,
     routePath,
+    routeKey,
+    srcPath: resolveFromProjectRoot(srcPath),
+    distRootDir: resolveFromOutputRoot(distRootDir),
+    pagesDir: resolveFromOutputRoot(pagesDir),
+    manifestPath: resolveFromOutputRoot(import_node_path4.default.join(distRootDir, "react-client-manifest.json")),
+    styleSrcPath: resolveFromProjectRoot(styleSrcPath),
     basePath: mountPath,
     assetsPrefix: `${mountPath}/assets/`,
     rscPath: `${mountPath}/rsc`,
@@ -1651,41 +1869,66 @@ function normalizeMethods(method) {
   }
   return Array.isArray(method) ? method : [method];
 }
-function registerByMethod(route, method, path4, component, routeOptions) {
+function registerByMethod(route, method, path5, component, routeOptions) {
   if (method === "GET") {
-    route.get(path4, component, routeOptions);
+    route.get(path5, component, routeOptions);
     return;
   }
   if (method === "POST") {
-    route.post(path4, component, routeOptions);
+    route.post(path5, component, routeOptions);
     return;
   }
   if (method === "PUT") {
-    route.put(path4, component, routeOptions);
+    route.put(path5, component, routeOptions);
     return;
   }
-  route.delete(path4, component, routeOptions);
+  route.delete(path5, component, routeOptions);
 }
 function registerRouteRenderer(route, methodName) {
   route.extend(methodName, () => {
-    return (path4, options) => {
-      if (!options || !options.distRootDir) {
-        throw new Error(
-          `Route.${methodName} requires at least { distRootDir }`
-        );
-      }
-      const defaults = buildRenderDefaults(path4);
+    return (routePathValue, options = {}) => {
+      const defaults = buildRenderDefaults(routePathValue);
       const {
         method,
         routeOptions,
+        srcPath,
+        distRootDir,
+        pagesDir,
+        manifestPath,
         basePath,
         assetsPrefix,
         rscPath,
         clientScriptUrl,
+        clientEntryPath,
+        styleSrcPath,
         ...nodeHandlerOptions
       } = options;
+      const resolvedDistRootDir = distRootDir ?? defaults.distRootDir;
+      const resolvedPagesDir = pagesDir ?? defaults.pagesDir;
+      const resolvedManifestPath = manifestPath ?? import_node_path4.default.join(resolvedDistRootDir, "react-client-manifest.json");
+      const resolvedTarget = {
+        path: defaults.path,
+        routePath: defaults.routePath,
+        routeKey: defaults.routeKey,
+        srcPath: srcPath ? resolveFromProjectRoot(srcPath) : defaults.srcPath,
+        distRootDir: resolvedDistRootDir,
+        pagesDir: resolvedPagesDir,
+        manifestPath: resolvedManifestPath,
+        assetsPrefix: assetsPrefix ?? defaults.assetsPrefix,
+        rscPath: rscPath ?? defaults.rscPath,
+        clientScriptUrl: clientScriptUrl ?? defaults.clientScriptUrl,
+        clientEntryPath: clientEntryPath ? resolveFromProjectRoot(clientEntryPath) : void 0,
+        styleSrcPath: styleSrcPath ? resolveFromProjectRoot(styleSrcPath) : defaults.styleSrcPath
+      };
+      getBuildTargetsRegistry().push(resolvedTarget);
+      if (process.env.WEBFRAMEZ_REACT_CAPTURE_ROUTES === "1") {
+        return;
+      }
       const handleNodeRequest = createNodeRequestHandler({
         ...nodeHandlerOptions,
+        distRootDir: resolvedTarget.distRootDir,
+        pagesDir: resolvedTarget.pagesDir,
+        manifestPath: resolvedTarget.manifestPath,
         basePath: basePath ?? defaults.basePath,
         assetsPrefix: assetsPrefix ?? defaults.assetsPrefix,
         rscPath: rscPath ?? defaults.rscPath,
@@ -1712,6 +1955,34 @@ function registerRouteRenderer(route, methodName) {
     };
   });
 }
+function resolveWebframezReactRouteOptions(routePathValue, options = {}) {
+  const defaults = buildRenderDefaults(routePathValue);
+  const distRootDir = options.distRootDir ?? defaults.distRootDir;
+  const pagesDir = options.pagesDir ?? defaults.pagesDir;
+  const manifestPath = options.manifestPath ?? import_node_path4.default.join(distRootDir, "react-client-manifest.json");
+  return {
+    path: defaults.path,
+    routePath: defaults.routePath,
+    routeKey: defaults.routeKey,
+    srcPath: options.srcPath ? resolveFromProjectRoot(options.srcPath) : defaults.srcPath,
+    distRootDir,
+    pagesDir,
+    manifestPath,
+    assetsPrefix: options.assetsPrefix ?? defaults.assetsPrefix,
+    rscPath: options.rscPath ?? defaults.rscPath,
+    clientScriptUrl: options.clientScriptUrl ?? defaults.clientScriptUrl,
+    clientEntryPath: options.clientEntryPath ? resolveFromProjectRoot(options.clientEntryPath) : void 0,
+    styleSrcPath: options.styleSrcPath ? resolveFromProjectRoot(options.styleSrcPath) : defaults.styleSrcPath,
+    basePath: options.basePath ?? defaults.basePath,
+    liveReloadPath: options.liveReloadPath
+  };
+}
+function getRegisteredReactBuildTargets() {
+  return [...getBuildTargetsRegistry()];
+}
+function clearRegisteredReactBuildTargets() {
+  getBuildTargetsRegistry().length = 0;
+}
 function initWebframezReact(route) {
   if (!route || typeof route.extend !== "function") {
     throw new Error(
@@ -1729,6 +2000,9 @@ function initWebframezReact(route) {
 var setupWebframezCoreReactRoute = initWebframezReact;
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  clearRegisteredReactBuildTargets,
+  getRegisteredReactBuildTargets,
   initWebframezReact,
+  resolveWebframezReactRouteOptions,
   setupWebframezCoreReactRoute
 });

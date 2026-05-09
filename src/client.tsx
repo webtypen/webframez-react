@@ -576,7 +576,5 @@ export function mountWebframezClient(options: ClientOptions = {}) {
     return payload;
   });
   const App = createApp(initialResponse, rscEndpoint);
-  const root = hydrateRoot(rootEl, <App />);
-
-  return root;
+  return hydrateRoot(rootEl, <App />);
 }
