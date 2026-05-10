@@ -51,6 +51,28 @@ function isExternal(href: string) {
   return /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(href) || href.startsWith("//");
 }
 
+function navigateWithClientRouter(href: string, mode: "push" | "replace" = "push") {
+  const router = getClientRouter();
+  if (router) {
+    router[mode](href);
+    return;
+  }
+
+  window.setTimeout(() => {
+    const nextRouter = getClientRouter();
+    if (nextRouter) {
+      nextRouter[mode](href);
+      return;
+    }
+
+    if (mode === "replace") {
+      window.location.replace(href);
+    } else {
+      window.location.assign(href);
+    }
+  }, 0);
+}
+
 function resolveHref(to: string, basename?: string) {
   if (!to || to.trim() === "") {
     return "/";
@@ -109,13 +131,8 @@ export function Link({ to, basename, onClick, ...rest }: LinkProps) {
                 return;
               }
 
-              const router = getClientRouter();
-              if (!router) {
-                return;
-              }
-
               event.preventDefault();
-              router.push(resolvedHref);
+              navigateWithClientRouter(resolvedHref);
             }
       }
     />
@@ -143,21 +160,7 @@ export function Redirect({ to, basename, replace = true }: RedirectProps) {
           return;
         }
 
-        const router = getClientRouter();
-        if (router) {
-          if (replace) {
-            router.replace(resolvedHref);
-          } else {
-            router.push(resolvedHref);
-          }
-          return;
-        }
-
-        if (replace) {
-          window.location.replace(resolvedHref);
-        } else {
-          window.location.assign(resolvedHref);
-        }
+        navigateWithClientRouter(resolvedHref, replace ? "replace" : "push");
       }, 0);
     }
   }

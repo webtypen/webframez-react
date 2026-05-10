@@ -451,7 +451,7 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
         setPageTree(nextPayload.pageModel);
         setRenderSplitTree(true);
 
-        const nextHref = `${url.pathname}${url.search}`;
+        const nextHref = `${url.pathname}${url.search}${url.hash}`;
         if (mode === "replace") {
           history.replaceState(null, "", nextHref);
           scrollToTop();
