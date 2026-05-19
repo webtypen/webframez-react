@@ -115,6 +115,7 @@ export type CreateHtmlShellOptions = {
   title?: string;
   rscEndpoint?: string;
   clientScriptUrl?: string;
+  buildId?: string;
   headTags?: string;
   rootHtml?: string;
   initialFlightData?: string;

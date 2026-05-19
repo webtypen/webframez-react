@@ -15,6 +15,7 @@ export function createHTMLShell(options: CreateHtmlShellOptions = {}) {
     title = "RSC App",
     rscEndpoint = "/rsc",
     clientScriptUrl = "/client.js",
+    buildId = "",
     headTags = "",
     rootHtml = "",
     initialFlightData = "",
@@ -80,6 +81,7 @@ export function createHTMLShell(options: CreateHtmlShellOptions = {}) {
     <script>window.__RSC_ENDPOINT = "${rscEndpoint}";</script>
     <script>window.__RSC_BASENAME = "${basename}";</script>
     <script>window.__RSC_ROUTE_BASE_PATH = "${routeBasePath}";</script>
+    <script>window.__WEBFRAMEZ_REACT_BUILD_ID = "${buildId}";</script>
     <script>window.__RSC_INITIAL_PAYLOAD = ${escapedInitialFlightData};</script>
     <script type="module" src="${clientScriptUrl}"></script>
     ${liveReloadScript}

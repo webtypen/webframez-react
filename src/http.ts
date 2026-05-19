@@ -48,6 +48,16 @@ function createClientAssetVersion(distRootDir: string) {
   }
 }
 
+function createBuildId(distRootDir: string, manifestPath: string) {
+  const clientVersion = createClientAssetVersion(distRootDir);
+  try {
+    const stat = fs.statSync(manifestPath);
+    return `${clientVersion}:${Math.floor(stat.mtimeMs)}-${stat.size}`;
+  } catch {
+    return clientVersion;
+  }
+}
+
 function appendAssetVersion(url: string, version: string) {
   if (!version) {
     return url;
@@ -943,6 +953,51 @@ function createServerConsumerManifest(
   return consumerManifest;
 }
 
+function createManifestLoader(options: {
+  distRootDir: string;
+  manifestPath: string;
+  cwd: string;
+}) {
+  let cache:
+    | {
+        cacheKey: string;
+        buildId: string;
+        moduleMap: Record<string, unknown>;
+        serverConsumerModuleMap: Record<string, Record<string, {
+          id: string;
+          chunks?: Array<string | number>;
+          name?: string;
+          async?: boolean;
+        }>>;
+      }
+    | null = null;
+
+  return () => {
+    const stat = fs.statSync(options.manifestPath);
+    const cacheKey = `${Math.floor(stat.mtimeMs)}-${stat.size}`;
+    if (cache && cache.cacheKey === cacheKey) {
+      return cache;
+    }
+
+    const moduleMap = normalizeClientManifest(
+      JSON.parse(fs.readFileSync(options.manifestPath, "utf-8")),
+      {
+        distRootDir: options.distRootDir,
+        cwd: options.cwd,
+      },
+    );
+
+    cache = {
+      cacheKey,
+      buildId: createBuildId(options.distRootDir, options.manifestPath),
+      moduleMap,
+      serverConsumerModuleMap: createServerConsumerManifest(moduleMap),
+    };
+
+    return cache;
+  };
+}
+
 export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
   const devServerId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const distRootDir = path.resolve(options.distRootDir);
@@ -965,14 +1020,11 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
   const liveReloadClients = new Set<ServerResponse>();
 
   const router = createFileRouter({ pagesDir });
-  const moduleMap = normalizeClientManifest(
-    JSON.parse(fs.readFileSync(manifestPath, "utf-8")),
-    {
-      distRootDir,
-      cwd: process.cwd(),
-    },
-  );
-  const serverConsumerModuleMap = createServerConsumerManifest(moduleMap);
+  const getManifestState = createManifestLoader({
+    distRootDir,
+    manifestPath,
+    cwd: process.cwd(),
+  });
   const initialHtmlWorker = createInitialHtmlWorker(pagesDir);
   const disposeInitialHtmlWorker = () => {
     initialHtmlWorker.dispose();
@@ -1031,6 +1083,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
     }
 
     if (url.pathname === rscPath) {
+      const manifestState = getManifestState();
       const pathname = stripBasePath(url.searchParams.get("path") || "/", basePath);
       const requestContext = createRouteRequestContext(
         req,
@@ -1053,8 +1106,9 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         pageModel: resolved.pageModel,
         head: resolved.head,
       };
+      res.setHeader("X-Webframez-React-Build", manifestState.buildId);
       sendRSC(res, payload, {
-        moduleMap,
+        moduleMap: manifestState.moduleMap,
         statusCode: resolved.statusCode,
       });
       return;
@@ -1132,8 +1186,9 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       model: resolved.model,
       head: resolved.head,
     };
+    const manifestState = getManifestState();
     const initialFlightData = await renderRSCToString(initialPayload, {
-      moduleMap,
+      moduleMap: manifestState.moduleMap,
     });
     const transportBasePath =
       normalizeRuntimeBasePath(resolved.head.transportBasePath) ??
@@ -1157,7 +1212,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
     try {
       rootHtml = await initialHtmlWorker.renderFromFlightData({
         flightData: initialFlightData,
-        moduleMap: serverConsumerModuleMap,
+        moduleMap: manifestState.serverConsumerModuleMap,
       });
     } catch (error) {
       console.error("[webframez-react] Failed to render initial HTML", error);
@@ -1165,7 +1220,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         initialHtmlWorker.dispose();
         rootHtml = await initialHtmlWorker.renderFromFlightData({
           flightData: initialFlightData,
-          moduleMap: serverConsumerModuleMap,
+          moduleMap: manifestState.serverConsumerModuleMap,
         });
       } catch (retryError) {
         console.error("[webframez-react] Retry for initial HTML failed", retryError);
@@ -1173,7 +1228,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
           initialHtmlWorker.dispose();
           rootHtml = await initialHtmlWorker.renderFromFlightData({
             flightData: initialFlightData,
-            moduleMap: serverConsumerModuleMap,
+            moduleMap: manifestState.serverConsumerModuleMap,
           });
         } catch (flightRenderError) {
           console.error("[webframez-react] Flight-to-HTML render failed", flightRenderError);
@@ -1199,6 +1254,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         title: resolved.head.title || "Webframez React",
         headTags: renderHeadToString(resolved.head),
         clientScriptUrl: shellClientScriptUrl,
+        buildId: manifestState.buildId,
         rscEndpoint: shellRscEndpoint,
         rootHtml,
         initialFlightData,

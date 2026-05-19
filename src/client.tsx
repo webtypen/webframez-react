@@ -47,6 +47,8 @@ const RouterContext: React.Context<RouterClient | null> | null =
     ? React.createContext<RouterClient | null>(null)
     : null;
 const GLOBAL_ROUTER_KEY = "__WEBFRAMEZ_ROUTER__";
+const GLOBAL_BUILD_ID_KEY = "__WEBFRAMEZ_REACT_BUILD_ID";
+const BUILD_ID_HEADER = "x-webframez-react-build";
 const MANAGED_HEAD_SELECTOR = "[data-webframez-head='true']";
 
 function scrollToTop() {
@@ -143,6 +145,30 @@ function resolveRscEndpoint(defaultEndpoint: string) {
   return typeof runtimeEndpoint === "string" && runtimeEndpoint.trim() !== ""
     ? runtimeEndpoint
     : defaultEndpoint;
+}
+
+function getRuntimeBuildId() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const value = (window as Window & { __WEBFRAMEZ_REACT_BUILD_ID?: string })[
+    GLOBAL_BUILD_ID_KEY
+  ];
+  return typeof value === "string" ? value : "";
+}
+
+function hasBuildMismatch(nextBuildId: string | null) {
+  const currentBuildId = getRuntimeBuildId();
+  return !!currentBuildId && !!nextBuildId && currentBuildId !== nextBuildId;
+}
+
+function fullReloadTo(url: URL) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.location.assign(`${url.pathname}${url.search}${url.hash}`);
 }
 
 function readGlobalRouter() {
@@ -423,18 +449,23 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
     async function fetchRoutePayload(url: URL) {
       const endpoint = resolveRscEndpoint(rscEndpoint);
       const requestPath = resolveRouteRequestPath(url.pathname);
-      const response = createFromFetch(
-        fetch(
-          `${endpoint}?path=${encodeURIComponent(requestPath)}&search=${encodeURIComponent(url.search)}`,
-          {
-            cache: "no-store",
-            credentials: "same-origin",
-            headers: {
-              Accept: "text/x-component",
-            },
-          }
-        )
+      const fetchResponse = await fetch(
+        `${endpoint}?path=${encodeURIComponent(requestPath)}&search=${encodeURIComponent(url.search)}`,
+        {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: {
+            Accept: "text/x-component",
+          },
+        }
       );
+
+      if (hasBuildMismatch(fetchResponse.headers.get(BUILD_ID_HEADER))) {
+        fullReloadTo(url);
+        return await new Promise<ClientNavigationPayload>(() => {});
+      }
+
+      const response = createFromFetch(Promise.resolve(fetchResponse));
 
       return await (response as Promise<ClientNavigationPayload>);
     }
@@ -461,6 +492,7 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
         }
       } catch (error) {
         console.error("[webframez-react] Failed to render route", error);
+        fullReloadTo(url);
         setTree(<p>Failed to load route.</p>);
       } finally {
         setPending(false);
@@ -485,6 +517,7 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
         setRenderSplitTree(false);
       } catch (error) {
         console.error("[webframez-react] Failed to refresh route context", error);
+        fullReloadTo(new URL(window.location.href));
       } finally {
         setPending(false);
       }
