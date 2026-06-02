@@ -328,6 +328,7 @@ function applyHead(head: HeadConfig) {
 
   const normalizedHead = normalizeHeadConfig(head) ?? head;
   applyHeadRuntimeGlobals(normalizedHead);
+  document.body.className = normalizedHead.bodyClassName || "";
 
   document.title = normalizedHead.title || "Webframez React";
 

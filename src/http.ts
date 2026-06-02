@@ -1253,6 +1253,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       createHTMLShell({
         title: resolved.head.title || "Webframez React",
         headTags: renderHeadToString(resolved.head),
+        bodyClassName: resolved.head.bodyClassName || "",
         clientScriptUrl: shellClientScriptUrl,
         buildId: manifestState.buildId,
         rscEndpoint: shellRscEndpoint,

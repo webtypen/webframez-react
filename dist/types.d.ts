@@ -60,6 +60,7 @@ export type HeadLinkTag = {
 export type HeadConfig = {
   title?: string;
   description?: string;
+  bodyClassName?: string;
   basename?: string;
   routeBasePath?: string;
   transportBasePath?: string;
@@ -113,6 +114,7 @@ export type CreateHtmlShellOptions = {
   clientScriptUrl?: string;
   buildId?: string;
   headTags?: string;
+  bodyClassName?: string;
   rootHtml?: string;
   initialFlightData?: string;
   basename?: string;

@@ -22,6 +22,7 @@ function createHTMLShell(options = {}) {
     clientScriptUrl = "/client.js",
     buildId = "",
     headTags = "",
+    bodyClassName = "",
     rootHtml = "",
     initialFlightData = "",
     basename = "",
@@ -70,7 +71,7 @@ function createHTMLShell(options = {}) {
     <title>${title}</title>
     ${headTags}
   </head>
-  <body>
+  <body${bodyClassName ? ` class="${bodyClassName.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}"` : ""}>
     <div id="root">${rootHtml}</div>
     <script>window.__RSC_ENDPOINT = "${rscEndpoint}";</script>
     <script>window.__RSC_BASENAME = "${basename}";</script>
@@ -467,6 +468,9 @@ function mergeHead(...configs) {
     }
     if (config.description) {
       merged.description = config.description;
+    }
+    if (hasOwn("bodyClassName")) {
+      merged.bodyClassName = config.bodyClassName;
     }
     if (hasOwn("basename")) {
       merged.basename = config.basename;
@@ -1765,6 +1769,7 @@ function createNodeRequestHandler(options) {
       createHTMLShell({
         title: resolved.head.title || "Webframez React",
         headTags: renderHeadToString(resolved.head),
+        bodyClassName: resolved.head.bodyClassName || "",
         clientScriptUrl: shellClientScriptUrl,
         buildId: manifestState.buildId,
         rscEndpoint: shellRscEndpoint,

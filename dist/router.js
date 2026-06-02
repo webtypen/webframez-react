@@ -327,6 +327,9 @@ function mergeHead(...configs) {
     if (config.description) {
       merged.description = config.description;
     }
+    if (hasOwn("bodyClassName")) {
+      merged.bodyClassName = config.bodyClassName;
+    }
     if (hasOwn("basename")) {
       merged.basename = config.basename;
     }
