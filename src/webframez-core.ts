@@ -5,6 +5,9 @@ import { createNodeRequestHandler } from "./http";
 
 type CoreRequest = {
   message?: IncomingMessage | null;
+  env?: unknown;
+  website?: unknown;
+  __webframezReactContext?: unknown;
 };
 
 type CoreResponse = {
@@ -321,7 +324,15 @@ function registerRouteRenderer(
               );
             }
 
-            await handleNodeRequest(req.message, res.res);
+            const message = req.message as IncomingMessage & {
+              __webframezCoreRequest?: CoreRequest;
+            };
+            message.__webframezCoreRequest = req;
+            try {
+              await handleNodeRequest(message, res.res);
+            } finally {
+              delete message.__webframezCoreRequest;
+            }
             await waitForResponseFinish(res.res);
           },
           routeOptions,

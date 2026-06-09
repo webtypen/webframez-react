@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
-import type { HeadConfig, RouteSearchParams } from "./types";
+import type { HeadConfig, RouteContext, RouteRequestContext, RouteSearchParams } from "./types";
 
 export type ResolvedRoute = {
   statusCode: number;
   model: ReactNode;
   head: HeadConfig;
+  context: RouteContext;
   contextModel?: ReactNode;
   pageModel?: ReactNode;
 };
@@ -14,6 +15,7 @@ export function createFileRouter(options: { pagesDir: string }): {
     pathname: string;
     searchParams: RouteSearchParams;
     cookies?: Record<string, string>;
+    request?: RouteRequestContext;
   }): Promise<ResolvedRoute>;
   readSearchParams(urlSearchParams: URLSearchParams): RouteSearchParams;
 };

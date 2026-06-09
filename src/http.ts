@@ -11,7 +11,7 @@ import {
 } from "node:zlib";
 import { createHTMLShell, renderRSCToString, sendRSC } from "./server";
 import { createFileRouter, parseSearchParams, renderHeadToString } from "./router";
-import type { ClientNavigationPayload, RouteRequestContext } from "./types";
+import type { ClientNavigationPayload, RouteContext, RouteRequestContext } from "./types";
 
 export type WebframezReactRoutePath = `/${string}` | "/";
 export type WebframezReactAssetsPrefix = `${WebframezReactRoutePath}/` | "/";
@@ -33,6 +33,74 @@ export interface CreateNodeHandlerRoutingOptions {
 export interface CreateNodeHandlerOptions
   extends CreateNodeHandlerPathsOptions,
     CreateNodeHandlerRoutingOptions {
+}
+
+type CoreRequestBridge = {
+  env?: unknown;
+  website?: unknown;
+  __webframezReactContext?: {
+    pathname: string;
+    params: RouteContext["params"];
+    request: RouteRequestContext;
+    data?: {
+      env?: unknown;
+      website?: unknown;
+      is_env_website_request?: unknown;
+      is_website_domain_request?: unknown;
+      website_base_path?: unknown;
+      website_route_base_path?: unknown;
+      website_transport_base_path?: unknown;
+    };
+  };
+};
+
+type IncomingMessageWithCoreBridge = IncomingMessage & {
+  __webframezCoreRequest?: CoreRequestBridge;
+};
+
+function attachResolvedContextToCoreRequest(
+  req: IncomingMessage,
+  context?: RouteContext,
+) {
+  if (!context) {
+    return;
+  }
+
+  const coreRequest = (req as IncomingMessageWithCoreBridge).__webframezCoreRequest;
+  if (!coreRequest) {
+    return;
+  }
+
+  const data =
+    context.data && typeof context.data === "object"
+      ? (context.data as Record<string, unknown>)
+      : undefined;
+  const env = data?.env;
+  const website = data?.website;
+
+  coreRequest.__webframezReactContext = {
+    pathname: context.pathname,
+    params: context.params,
+    request: context.request,
+    data: data
+      ? {
+          env,
+          website,
+          is_env_website_request: data.is_env_website_request,
+          is_website_domain_request: data.is_website_domain_request,
+          website_base_path: data.website_base_path,
+          website_route_base_path: data.website_route_base_path,
+          website_transport_base_path: data.website_transport_base_path,
+        }
+      : undefined,
+  };
+
+  if (!coreRequest.env && env) {
+    coreRequest.env = env;
+  }
+  if (!coreRequest.website && website) {
+    coreRequest.website = website;
+  }
 }
 
 function createInitialHtmlErrorMarkup(message: string) {
@@ -1099,6 +1167,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
           request: requestContext,
         })
       );
+      attachResolvedContextToCoreRequest(req, resolved.context);
 
       const payload: ClientNavigationPayload = {
         model: resolved.model,
@@ -1182,6 +1251,8 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         ),
       })
     );
+    attachResolvedContextToCoreRequest(req, resolved.context);
+
     const initialPayload: ClientNavigationPayload = {
       model: resolved.model,
       head: resolved.head,

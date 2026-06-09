@@ -616,7 +616,8 @@ function createFileRouter(options) {
         model: fallback,
         head: {
           title: `${statusCode} - ${message}`
-        }
+        },
+        context: errorProps
       };
     }
     const errorModule = resolveModule(errorPath, pagesDir);
@@ -631,7 +632,8 @@ function createFileRouter(options) {
       model,
       contextModel,
       pageModel: errorNode,
-      head: mergeHead(layoutHead, errorHead)
+      head: mergeHead(layoutHead, errorHead),
+      context: errorProps
     };
   }
   function normalizeMiddlewareNames(config) {
@@ -756,7 +758,8 @@ function createFileRouter(options) {
         model,
         contextModel,
         pageModel: pageNode,
-        head: mergeHead(layoutHead, pageHead)
+        head: mergeHead(layoutHead, pageHead),
+        context: pageContext
       };
     } catch (error) {
       if (isRouteAbort(error)) {
@@ -776,6 +779,38 @@ function parseSearchParams(query) {
 }
 
 // src/http.ts
+function attachResolvedContextToCoreRequest(req, context) {
+  if (!context) {
+    return;
+  }
+  const coreRequest = req.__webframezCoreRequest;
+  if (!coreRequest) {
+    return;
+  }
+  const data = context.data && typeof context.data === "object" ? context.data : void 0;
+  const env = data?.env;
+  const website = data?.website;
+  coreRequest.__webframezReactContext = {
+    pathname: context.pathname,
+    params: context.params,
+    request: context.request,
+    data: data ? {
+      env,
+      website,
+      is_env_website_request: data.is_env_website_request,
+      is_website_domain_request: data.is_website_domain_request,
+      website_base_path: data.website_base_path,
+      website_route_base_path: data.website_route_base_path,
+      website_transport_base_path: data.website_transport_base_path
+    } : void 0
+  };
+  if (!coreRequest.env && env) {
+    coreRequest.env = env;
+  }
+  if (!coreRequest.website && website) {
+    coreRequest.website = website;
+  }
+}
 function createInitialHtmlErrorMarkup(message) {
   return `<main style="font-family:system-ui,sans-serif;padding:24px"><h1 style="margin:0 0 12px">500</h1><p style="margin:0">${message}</p></main>`;
 }
@@ -1606,6 +1641,7 @@ function createNodeRequestHandler(options) {
           request: requestContext
         })
       );
+      attachResolvedContextToCoreRequest(req, resolved2.context);
       const payload = {
         model: resolved2.model,
         contextModel: resolved2.contextModel,
@@ -1680,6 +1716,7 @@ function createNodeRequestHandler(options) {
         )
       })
     );
+    attachResolvedContextToCoreRequest(req, resolved.context);
     const initialPayload = {
       model: resolved.model,
       head: resolved.head

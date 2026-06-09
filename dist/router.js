@@ -490,7 +490,8 @@ function createFileRouter(options) {
         model: fallback,
         head: {
           title: `${statusCode} - ${message}`
-        }
+        },
+        context: errorProps
       };
     }
     const errorModule = resolveModule(errorPath, pagesDir);
@@ -505,7 +506,8 @@ function createFileRouter(options) {
       model,
       contextModel,
       pageModel: errorNode,
-      head: mergeHead(layoutHead, errorHead)
+      head: mergeHead(layoutHead, errorHead),
+      context: errorProps
     };
   }
   function normalizeMiddlewareNames(config) {
@@ -630,7 +632,8 @@ function createFileRouter(options) {
         model,
         contextModel,
         pageModel: pageNode,
-        head: mergeHead(layoutHead, pageHead)
+        head: mergeHead(layoutHead, pageHead),
+        context: pageContext
       };
     } catch (error) {
       if (isRouteAbort(error)) {

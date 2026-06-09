@@ -66,6 +66,7 @@ export type ResolvedRoute = {
   statusCode: number;
   model: React.ReactNode;
   head: HeadConfig;
+  context: RouteContext;
   contextModel?: React.ReactNode;
   pageModel?: React.ReactNode;
 };
@@ -498,6 +499,7 @@ export function createFileRouter(options: { pagesDir: string }) {
         head: {
           title: `${statusCode} - ${message}`,
         },
+        context: errorProps,
       };
     }
 
@@ -525,6 +527,7 @@ export function createFileRouter(options: { pagesDir: string }) {
       contextModel,
       pageModel: errorNode,
       head: mergeHead(layoutHead, errorHead),
+      context: errorProps,
     };
   }
 
@@ -692,6 +695,7 @@ export function createFileRouter(options: { pagesDir: string }) {
         contextModel,
         pageModel: pageNode,
         head: mergeHead(layoutHead, pageHead),
+        context: pageContext,
       };
     } catch (error) {
       if (isRouteAbort(error)) {
