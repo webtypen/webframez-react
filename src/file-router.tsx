@@ -2,9 +2,8 @@ import fs from "node:fs";
 import Module from "node:module";
 import path from "node:path";
 import React from "react";
-import { RouteChildrenSlot } from "@webtypen/webframez-react/route-slot";
 import { normalizeHeadConfig } from "./head";
-import { injectRouteChildren } from "./router-runtime";
+import { RouteChildren, injectRouteChildren } from "./router-runtime";
 import type {
   AbortRouteOptions,
   ErrorModule,
@@ -518,7 +517,7 @@ export function createFileRouter(options: { pagesDir: string }) {
       ? injectRouteChildren(layoutNode, errorNode)
       : errorNode;
     const contextModel = layoutNode
-      ? injectRouteChildren(layoutNode, <RouteChildrenSlot />)
+      ? injectRouteChildren(layoutNode, <RouteChildren />)
       : undefined;
 
     return {
@@ -686,7 +685,7 @@ export function createFileRouter(options: { pagesDir: string }) {
         ? injectRouteChildren(layoutNode, pageNode)
         : pageNode;
       const contextModel = layoutNode
-        ? injectRouteChildren(layoutNode, <RouteChildrenSlot />)
+        ? injectRouteChildren(layoutNode, <RouteChildren />)
         : undefined;
 
       return {

@@ -10,7 +10,6 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
 import fs from "node:fs";
 import Module from "node:module";
 import path from "node:path";
-import { RouteChildrenSlot } from "@webtypen/webframez-react/route-slot";
 
 // src/head.ts
 var ABSOLUTE_ASSET_URL_PATTERN = /^(?:[a-zA-Z][a-zA-Z\d+\-.]*:|\/\/|#)/;
@@ -513,7 +512,7 @@ function createFileRouter(options) {
     const errorHead = await resolveHead(errorModule, errorProps);
     const layoutNode = layoutModule ? await layoutModule.default(context) : null;
     const model = layoutNode ? injectRouteChildren(layoutNode, errorNode) : errorNode;
-    const contextModel = layoutNode ? injectRouteChildren(layoutNode, /* @__PURE__ */ jsx(RouteChildrenSlot, {})) : void 0;
+    const contextModel = layoutNode ? injectRouteChildren(layoutNode, /* @__PURE__ */ jsx(RouteChildren, {})) : void 0;
     return {
       statusCode,
       model,
@@ -639,7 +638,7 @@ function createFileRouter(options) {
       const pageHead = await resolveHead(pageModule, pageContext);
       const layoutNode = layoutModule ? await layoutModule.default(pageContext) : null;
       const model = layoutNode ? injectRouteChildren(layoutNode, pageNode) : pageNode;
-      const contextModel = layoutNode ? injectRouteChildren(layoutNode, /* @__PURE__ */ jsx(RouteChildrenSlot, {})) : void 0;
+      const contextModel = layoutNode ? injectRouteChildren(layoutNode, /* @__PURE__ */ jsx(RouteChildren, {})) : void 0;
       return {
         statusCode: 200,
         model,

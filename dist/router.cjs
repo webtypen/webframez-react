@@ -40,7 +40,6 @@ module.exports = __toCommonJS(router_exports);
 var import_node_fs = __toESM(require("node:fs"), 1);
 var import_node_module = __toESM(require("node:module"), 1);
 var import_node_path = __toESM(require("node:path"), 1);
-var import_route_slot = require("@webtypen/webframez-react/route-slot");
 
 // src/head.ts
 var ABSOLUTE_ASSET_URL_PATTERN = /^(?:[a-zA-Z][a-zA-Z\d+\-.]*:|\/\/|#)/;
@@ -543,7 +542,7 @@ function createFileRouter(options) {
     const errorHead = await resolveHead(errorModule, errorProps);
     const layoutNode = layoutModule ? await layoutModule.default(context) : null;
     const model = layoutNode ? injectRouteChildren(layoutNode, errorNode) : errorNode;
-    const contextModel = layoutNode ? injectRouteChildren(layoutNode, /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_route_slot.RouteChildrenSlot, {})) : void 0;
+    const contextModel = layoutNode ? injectRouteChildren(layoutNode, /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RouteChildren, {})) : void 0;
     return {
       statusCode,
       model,
@@ -669,7 +668,7 @@ function createFileRouter(options) {
       const pageHead = await resolveHead(pageModule, pageContext);
       const layoutNode = layoutModule ? await layoutModule.default(pageContext) : null;
       const model = layoutNode ? injectRouteChildren(layoutNode, pageNode) : pageNode;
-      const contextModel = layoutNode ? injectRouteChildren(layoutNode, /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_route_slot.RouteChildrenSlot, {})) : void 0;
+      const contextModel = layoutNode ? injectRouteChildren(layoutNode, /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RouteChildren, {})) : void 0;
       return {
         statusCode: 200,
         model,
