@@ -188,6 +188,18 @@ function writeGlobalRouter(router: RouterClient) {
   (window as Window & { __WEBFRAMEZ_ROUTER__?: RouterClient })[GLOBAL_ROUTER_KEY] = router;
 }
 
+function isThenable<T = unknown>(value: unknown): value is PromiseLike<T> {
+  return (
+    !!value &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
+}
+
+function useResolvedNode(node: React.ReactNode): React.ReactNode {
+  return isThenable<React.ReactNode>(node) ? React.use(node) : node;
+}
+
 function parseBrowserCookies() {
   const result: Record<string, string> = {};
   const raw = typeof document === "undefined" ? "" : document.cookie;
@@ -561,15 +573,17 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
     );
     writeGlobalRouter(routerValue);
 
+    const resolvedContextTree = useResolvedNode(contextTree);
+    const resolvedPageTree = useResolvedNode(pageTree);
     const renderedTree =
       renderSplitTree && typeof pageTree !== "undefined"
-        ? contextTree
+        ? resolvedContextTree
           ? (
-              <RouteChildrenSlotProvider page={pageTree}>
-                {injectRouteChildren(contextTree, pageTree)}
+              <RouteChildrenSlotProvider page={resolvedPageTree}>
+                {injectRouteChildren(resolvedContextTree, resolvedPageTree)}
               </RouteChildrenSlotProvider>
             )
-          : pageTree
+          : resolvedPageTree
         : tree;
 
     const content = (
