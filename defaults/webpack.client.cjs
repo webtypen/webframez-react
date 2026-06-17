@@ -34,6 +34,53 @@ const frameworkCacheVersion = frameworkCacheFiles
 fs.mkdirSync(distDir, { recursive: true });
 fs.mkdirSync(pagesDir, { recursive: true });
 
+function getEmittedChunkAssetsByName() {
+  const chunksDir = path.join(distDir, "chunks");
+  const assetsByName = new Map();
+  if (!fs.existsSync(chunksDir)) {
+    return assetsByName;
+  }
+
+  for (const fileName of fs.readdirSync(chunksDir)) {
+    const match = fileName.match(/^(.*)-[a-f0-9]+\.js$/i);
+    if (match && match[1]) {
+      assetsByName.set(match[1], "chunks/" + fileName);
+    }
+  }
+
+  return assetsByName;
+}
+
+function normalizeManifestChunkFiles(manifest) {
+  const assetsByName = getEmittedChunkAssetsByName();
+  if (assetsByName.size === 0) {
+    return false;
+  }
+
+  let changed = false;
+  for (const value of Object.values(manifest)) {
+    if (!value || typeof value !== "object" || !Array.isArray(value.chunks)) {
+      continue;
+    }
+
+    const nextChunks = value.chunks.map((chunk, index, chunks) => {
+      if (index % 2 === 1 && typeof chunks[index - 1] === "string") {
+        return assetsByName.get(chunks[index - 1]) || chunk;
+      }
+
+      return chunk;
+    });
+
+    if (nextChunks.some((chunk, index) => chunk !== value.chunks[index])) {
+      value.chunks = nextChunks;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+
 class ClientManifestExportAliasesPlugin {
   apply(compiler) {
     compiler.hooks.done.tap("ClientManifestExportAliasesPlugin", () => {
@@ -150,6 +197,10 @@ class ClientManifestExportAliasesPlugin {
             }
           }
         }
+      }
+
+      if (normalizeManifestChunkFiles(manifest)) {
+        changed = true;
       }
 
       if (changed) {

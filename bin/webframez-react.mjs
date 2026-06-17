@@ -519,6 +519,84 @@ async function watchRouteTargets(targets, passthroughArgsClean) {
   });
 }
 
+function getManifestChunkAssetsByName(distRootDir) {
+  const chunksDir = path.join(distRootDir, "chunks");
+  const assetsByName = new Map();
+  if (!fileExists(chunksDir)) {
+    return assetsByName;
+  }
+
+  for (const fileName of fs.readdirSync(chunksDir)) {
+    const match = fileName.match(/^(.*)-[a-f0-9]+\.js$/i);
+    if (match && match[1]) {
+      assetsByName.set(match[1], path.join("chunks", fileName));
+    }
+  }
+
+  return assetsByName;
+}
+
+function normalizeRouteManifestChunkFiles(distRootDir) {
+  const manifestPath = path.join(distRootDir, "react-client-manifest.json");
+  if (!fileExists(manifestPath)) {
+    return;
+  }
+
+  const assetsByName = getManifestChunkAssetsByName(distRootDir);
+  if (assetsByName.size === 0) {
+    return;
+  }
+
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+  let changed = false;
+  for (const value of Object.values(manifest)) {
+    if (!value || typeof value !== "object" || !Array.isArray(value.chunks)) {
+      continue;
+    }
+
+    const nextChunks = value.chunks.map((chunk, index, chunks) => {
+      if (index % 2 === 1 && typeof chunks[index - 1] === "string") {
+        return assetsByName.get(chunks[index - 1]) || chunk;
+      }
+
+      return chunk;
+    });
+
+    if (nextChunks.some((chunk, index) => chunk !== value.chunks[index])) {
+      value.chunks = nextChunks;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  }
+}
+
+function collectMissingManifestChunks(distRootDir) {
+  const manifestPath = path.join(distRootDir, "react-client-manifest.json");
+  if (!fileExists(manifestPath)) {
+    return [];
+  }
+
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+  const missing = [];
+  for (const value of Object.values(manifest)) {
+    if (!value || typeof value !== "object" || !Array.isArray(value.chunks)) {
+      continue;
+    }
+
+    for (let index = 1; index < value.chunks.length; index += 2) {
+      const chunk = value.chunks[index];
+      if (typeof chunk === "string" && chunk.includes(".") && !fileExists(path.join(distRootDir, chunk))) {
+        missing.push(chunk);
+      }
+    }
+  }
+
+  return Array.from(new Set(missing));
+}
+
 async function validateRouteBuild(target) {
   const requiredFiles = [
     path.join(target.distRootDir, "client.js"),
@@ -530,6 +608,13 @@ async function validateRouteBuild(target) {
   if (missing.length > 0) {
     throw new Error(
       `Route ${target.path} build is incomplete. Missing: ${missing.join(", ")}`,
+    );
+  }
+
+  const missingChunks = collectMissingManifestChunks(target.distRootDir);
+  if (missingChunks.length > 0) {
+    throw new Error(
+      `Route ${target.path} client manifest references missing chunks: ${missingChunks.join(", ")}`,
     );
   }
 }
@@ -631,6 +716,7 @@ async function main() {
         return;
       }
 
+      normalizeRouteManifestChunkFiles(target.distRootDir);
       await validateRouteBuild(target);
     }
 

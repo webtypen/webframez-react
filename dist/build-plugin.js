@@ -7,6 +7,47 @@ function fileExists(filePath) {
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf-8"));
 }
+function getEmittedChunkAssetsByName(distRootDir) {
+  const chunksDir = path.join(distRootDir, "chunks");
+  const assetsByName = /* @__PURE__ */ new Map();
+  if (!fileExists(chunksDir)) {
+    return assetsByName;
+  }
+  for (const fileName of fs.readdirSync(chunksDir)) {
+    const match = fileName.match(/^(.*)-[a-f0-9]+\.js$/i);
+    if (match?.[1]) {
+      assetsByName.set(match[1], path.join("chunks", fileName));
+    }
+  }
+  return assetsByName;
+}
+function normalizeManifestChunkFiles(distRootDir, manifestPath) {
+  const manifest = readJson(manifestPath);
+  const assetsByName = getEmittedChunkAssetsByName(distRootDir);
+  if (assetsByName.size === 0) {
+    return;
+  }
+  let changed = false;
+  for (const value of Object.values(manifest)) {
+    const entry = value;
+    if (!entry || !Array.isArray(entry.chunks)) {
+      continue;
+    }
+    const nextChunks = entry.chunks.map((chunk, index, chunks) => {
+      if (index % 2 === 1 && typeof chunks[index - 1] === "string") {
+        return assetsByName.get(chunks[index - 1]) || chunk;
+      }
+      return chunk;
+    });
+    if (nextChunks.some((chunk, index) => chunk !== entry.chunks?.[index])) {
+      entry.chunks = nextChunks;
+      changed = true;
+    }
+  }
+  if (changed) {
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  }
+}
 function collectManifestChunks(manifestPath) {
   const manifest = readJson(manifestPath);
   const chunks = /* @__PURE__ */ new Set();
@@ -31,7 +72,9 @@ function validateRouteDist(distRootDir) {
       throw new Error(`webframez-react build output missing: ${filePath}`);
     }
   }
-  for (const chunk of collectManifestChunks(path.join(distRootDir, "react-client-manifest.json"))) {
+  const clientManifestPath = path.join(distRootDir, "react-client-manifest.json");
+  normalizeManifestChunkFiles(distRootDir, clientManifestPath);
+  for (const chunk of collectManifestChunks(clientManifestPath)) {
     const chunkPath = path.join(distRootDir, chunk);
     if (!fileExists(chunkPath)) {
       throw new Error(`webframez-react manifest references missing chunk: ${chunkPath}`);
