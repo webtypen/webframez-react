@@ -1005,13 +1005,31 @@ globalThis.__webpack_chunk_load__ = function __webframezNoopChunkLoad() {
 };
 function normalizeWebframezRequireCandidate(candidate) {
   const stagingMarker = path.join(".webframez-build", "");
-  const appMarker = path.join("app", "");
+  const runtimeMarkers = [path.join("app", ""), path.join("modules", "")];
   const stagingIndex = candidate.indexOf(stagingMarker);
-  const appIndex = candidate.indexOf(appMarker, stagingIndex >= 0 ? stagingIndex : 0);
-  if (stagingIndex >= 0 && appIndex >= 0) {
-    const runtimeCandidate = path.resolve(process.cwd(), candidate.slice(appIndex));
-    if (fs.existsSync(runtimeCandidate)) {
-      return runtimeCandidate;
+  if (stagingIndex >= 0) {
+    for (const runtimeMarker of runtimeMarkers) {
+      const markerIndex = candidate.indexOf(runtimeMarker, stagingIndex);
+      if (markerIndex < 0) {
+        continue;
+      }
+
+      const relativeRuntimePath = candidate.slice(markerIndex);
+      const runtimeCandidates = [
+        path.resolve(process.cwd(), relativeRuntimePath),
+        path.resolve(process.cwd(), "build", relativeRuntimePath)
+      ];
+      const cwdParts = process.cwd().split(path.sep);
+      const buildsIndex = cwdParts.lastIndexOf("builds");
+      if (buildsIndex > 0) {
+        const projectRoot = cwdParts.slice(0, buildsIndex).join(path.sep) || path.sep;
+        runtimeCandidates.push(path.resolve(projectRoot, "build", relativeRuntimePath));
+      }
+
+      const runtimeCandidate = runtimeCandidates.find((candidatePath) => fs.existsSync(candidatePath));
+      if (runtimeCandidate) {
+        return runtimeCandidate;
+      }
     }
   }
 
