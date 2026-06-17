@@ -556,15 +556,11 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
         const nextPayload = await fetchRoutePayload(new URL(window.location.href));
         applyHead(nextPayload.head);
         setHead(nextPayload.head);
-
-        if (Object.prototype.hasOwnProperty.call(nextPayload, "contextModel")) {
-          setContextTree(nextPayload.contextModel);
-          setRenderSplitTree(true);
-          return;
-        }
-
         setTree(nextPayload.model);
+        setContextTree(nextPayload.contextModel);
+        setPageTree(nextPayload.pageModel);
         setRenderSplitTree(false);
+
       } catch (error) {
         console.error("[webframez-react] Failed to refresh route context", error);
         fullReloadTo(new URL(window.location.href));
