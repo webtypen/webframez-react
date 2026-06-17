@@ -34,6 +34,27 @@ const frameworkCacheVersion = frameworkCacheFiles
 fs.mkdirSync(distDir, { recursive: true });
 fs.mkdirSync(pagesDir, { recursive: true });
 
+function getCompilationChunkAssetsByName(compilation) {
+  const assetsByName = new Map();
+  if (!compilation || !compilation.chunks) {
+    return assetsByName;
+  }
+
+  for (const chunk of compilation.chunks) {
+    const chunkName = chunk.name || chunk.id;
+    if (typeof chunkName !== "string") {
+      continue;
+    }
+
+    const jsFile = Array.from(chunk.files || []).find((fileName) => /^chunks\/.*\.js$/.test(fileName));
+    if (jsFile) {
+      assetsByName.set(chunkName, jsFile);
+    }
+  }
+
+  return assetsByName;
+}
+
 function getEmittedChunkAssetsByName() {
   const chunksDir = path.join(distDir, "chunks");
   const assetsByName = new Map();
@@ -41,9 +62,18 @@ function getEmittedChunkAssetsByName() {
     return assetsByName;
   }
 
-  for (const fileName of fs.readdirSync(chunksDir)) {
+  const fileNames = fs
+    .readdirSync(chunksDir)
+    .map((fileName) => ({
+      fileName,
+      mtimeMs: fs.statSync(path.join(chunksDir, fileName)).mtimeMs,
+    }))
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .map((entry) => entry.fileName);
+
+  for (const fileName of fileNames) {
     const match = fileName.match(/^(.*)-[a-f0-9]+\.js$/i);
-    if (match && match[1]) {
+    if (match && match[1] && !assetsByName.has(match[1])) {
       assetsByName.set(match[1], "chunks/" + fileName);
     }
   }
@@ -51,8 +81,7 @@ function getEmittedChunkAssetsByName() {
   return assetsByName;
 }
 
-function normalizeManifestChunkFiles(manifest) {
-  const assetsByName = getEmittedChunkAssetsByName();
+function normalizeManifestChunkFiles(manifest, assetsByName = getEmittedChunkAssetsByName()) {
   if (assetsByName.size === 0) {
     return false;
   }
@@ -83,13 +112,14 @@ function normalizeManifestChunkFiles(manifest) {
 
 class ClientManifestExportAliasesPlugin {
   apply(compiler) {
-    compiler.hooks.done.tap("ClientManifestExportAliasesPlugin", () => {
+    compiler.hooks.done.tap("ClientManifestExportAliasesPlugin", (stats) => {
       const manifestPath = path.join(distDir, "react-client-manifest.json");
       if (!fs.existsSync(manifestPath)) {
         return;
       }
 
       const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+      const assetsByName = getCompilationChunkAssetsByName(stats && stats.compilation);
       let changed = false;
 
       for (const [key, value] of Object.entries(manifest)) {
@@ -199,7 +229,7 @@ class ClientManifestExportAliasesPlugin {
         }
       }
 
-      if (normalizeManifestChunkFiles(manifest)) {
+      if (normalizeManifestChunkFiles(manifest, assetsByName.size > 0 ? assetsByName : undefined)) {
         changed = true;
       }
 

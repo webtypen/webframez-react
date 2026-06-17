@@ -1761,7 +1761,7 @@ function createNodeRequestHandler(options) {
         transportBasePath,
         clientScriptUrl
       ),
-      createClientAssetVersion(distRootDir)
+      manifestState.buildId
     );
     const shellRscEndpoint = joinRuntimeBasePath(transportBasePath, "/rsc");
     const shellBasename = normalizeRuntimeBasePath(resolved.head.basename) ?? normalizeRuntimeBasePath(basePath) ?? "";

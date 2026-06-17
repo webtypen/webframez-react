@@ -200,6 +200,43 @@ function useResolvedNode(node: React.ReactNode): React.ReactNode {
   return isThenable<React.ReactNode>(node) ? React.use(node) : node;
 }
 
+function useResolvedTreeNode(node: React.ReactNode): React.ReactNode {
+  const resolvedNode = useResolvedNode(node);
+
+  if (Array.isArray(resolvedNode)) {
+    let changed = false;
+    const nextChildren = resolvedNode.map((child) => {
+      const nextChild = useResolvedTreeNode(child);
+      if (nextChild !== child) {
+        changed = true;
+      }
+      return nextChild;
+    });
+
+    return changed ? nextChildren : resolvedNode;
+  }
+
+  if (!React.isValidElement(resolvedNode)) {
+    return resolvedNode;
+  }
+
+  const props = resolvedNode.props as { children?: React.ReactNode };
+  if (!("children" in props)) {
+    return resolvedNode;
+  }
+
+  const nextChildren = useResolvedTreeNode(props.children);
+  if (nextChildren === props.children) {
+    return resolvedNode;
+  }
+
+  if (Array.isArray(nextChildren)) {
+    return React.cloneElement(resolvedNode, undefined, ...nextChildren);
+  }
+
+  return React.cloneElement(resolvedNode, undefined, nextChildren);
+}
+
 function parseBrowserCookies() {
   const result: Record<string, string> = {};
   const raw = typeof document === "undefined" ? "" : document.cookie;
@@ -493,7 +530,7 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
         setTree(nextPayload.model);
         setContextTree(nextPayload.contextModel);
         setPageTree(nextPayload.pageModel);
-        setRenderSplitTree(true);
+        setRenderSplitTree(false);
 
         const nextHref = `${url.pathname}${url.search}${url.hash}`;
         if (mode === "replace") {
@@ -573,8 +610,8 @@ function createApp(initialResponse: Promise<ClientNavigationPayload>, rscEndpoin
     );
     writeGlobalRouter(routerValue);
 
-    const resolvedContextTree = useResolvedNode(contextTree);
-    const resolvedPageTree = useResolvedNode(pageTree);
+    const resolvedContextTree = useResolvedTreeNode(contextTree);
+    const resolvedPageTree = useResolvedTreeNode(pageTree);
     const renderedTree =
       renderSplitTree && typeof pageTree !== "undefined"
         ? resolvedContextTree

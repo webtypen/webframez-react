@@ -13,9 +13,13 @@ function getEmittedChunkAssetsByName(distRootDir) {
   if (!fileExists(chunksDir)) {
     return assetsByName;
   }
-  for (const fileName of fs.readdirSync(chunksDir)) {
+  const fileNames = fs.readdirSync(chunksDir).map((fileName) => ({
+    fileName,
+    mtimeMs: fs.statSync(path.join(chunksDir, fileName)).mtimeMs
+  })).sort((a, b) => b.mtimeMs - a.mtimeMs).map((entry) => entry.fileName);
+  for (const fileName of fileNames) {
     const match = fileName.match(/^(.*)-[a-f0-9]+\.js$/i);
-    if (match?.[1]) {
+    if (match?.[1] && !assetsByName.has(match[1])) {
       assetsByName.set(match[1], path.join("chunks", fileName));
     }
   }
