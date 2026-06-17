@@ -36,6 +36,8 @@ __export(route_slot_exports, {
 module.exports = __toCommonJS(route_slot_exports);
 var import_react = __toESM(require("react"), 1);
 var import_jsx_runtime = require("react/jsx-runtime");
+var ROUTE_CHILDREN_SLOT_SENTINEL = "__webframezRouteChildrenSlot";
+var ROUTE_CHILDREN_SLOT_DISPLAY_NAME = "WebframezRouteChildrenSlot";
 var RouteChildrenSlotContext = import_react.default.createContext(null);
 function RouteChildrenSlotProvider({
   children,
@@ -46,6 +48,8 @@ function RouteChildrenSlotProvider({
 function RouteChildrenSlot() {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children: import_react.default.useContext(RouteChildrenSlotContext) });
 }
+RouteChildrenSlot.displayName = ROUTE_CHILDREN_SLOT_DISPLAY_NAME;
+RouteChildrenSlot[ROUTE_CHILDREN_SLOT_SENTINEL] = true;
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   RouteChildrenSlot,

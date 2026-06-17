@@ -235,6 +235,8 @@ var import_react = __toESM(require("react"), 1);
 var ROUTE_CHILDREN_TAG = "webframez-route-children";
 var ROUTE_CHILDREN_SENTINEL = "__webframezRouteChildren";
 var ROUTE_CHILDREN_DISPLAY_NAME = "WebframezRouteChildren";
+var ROUTE_CHILDREN_SLOT_SENTINEL = "__webframezRouteChildrenSlot";
+var ROUTE_CHILDREN_SLOT_DISPLAY_NAME = "WebframezRouteChildrenSlot";
 var RouteChildrenImpl = () => import_react.default.createElement(ROUTE_CHILDREN_TAG);
 RouteChildrenImpl.displayName = ROUTE_CHILDREN_DISPLAY_NAME;
 RouteChildrenImpl[ROUTE_CHILDREN_SENTINEL] = true;
@@ -249,6 +251,17 @@ function isRouteChildrenType(type) {
   try {
     const candidate = type;
     return candidate[ROUTE_CHILDREN_SENTINEL] === true || candidate.displayName === ROUTE_CHILDREN_DISPLAY_NAME || candidate.name === "RouteChildren";
+  } catch {
+    return false;
+  }
+}
+function isRouteChildrenSlotType(type) {
+  if (!type || typeof type !== "function" && typeof type !== "object") {
+    return false;
+  }
+  try {
+    const candidate = type;
+    return candidate[ROUTE_CHILDREN_SLOT_SENTINEL] === true || candidate.displayName === ROUTE_CHILDREN_SLOT_DISPLAY_NAME || candidate.name === "RouteChildrenSlot";
   } catch {
     return false;
   }
@@ -278,14 +291,14 @@ function injectRouteChildren(node, routeChildren) {
     });
     return changed ? next : node;
   }
-  if (isReactElementLike(node) && isRouteChildrenType(node.type)) {
+  if (isReactElementLike(node) && (isRouteChildrenType(node.type) || isRouteChildrenSlotType(node.type))) {
     return routeChildren;
   }
   const isValidElement = import_react.default.isValidElement(node);
   if (!isValidElement && !isReactElementLike(node)) {
     return node;
   }
-  if (isValidElement && isRouteChildrenType(node.type)) {
+  if (isValidElement && (isRouteChildrenType(node.type) || isRouteChildrenSlotType(node.type))) {
     return routeChildren;
   }
   const props = node.props ?? {};

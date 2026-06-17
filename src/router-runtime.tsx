@@ -3,6 +3,8 @@ import React from "react";
 const ROUTE_CHILDREN_TAG = "webframez-route-children";
 const ROUTE_CHILDREN_SENTINEL = "__webframezRouteChildren";
 const ROUTE_CHILDREN_DISPLAY_NAME = "WebframezRouteChildren";
+const ROUTE_CHILDREN_SLOT_SENTINEL = "__webframezRouteChildrenSlot";
+const ROUTE_CHILDREN_SLOT_DISPLAY_NAME = "WebframezRouteChildrenSlot";
 
 type RouteChildrenType = {
   (): React.ReactNode;
@@ -36,6 +38,29 @@ function isRouteChildrenType(type: unknown) {
       candidate[ROUTE_CHILDREN_SENTINEL] === true ||
       candidate.displayName === ROUTE_CHILDREN_DISPLAY_NAME ||
       candidate.name === "RouteChildren"
+    );
+  } catch {
+    return false;
+  }
+}
+
+
+function isRouteChildrenSlotType(type: unknown) {
+  if (!type || (typeof type !== "function" && typeof type !== "object")) {
+    return false;
+  }
+
+  try {
+    const candidate = type as {
+      displayName?: string;
+      name?: string;
+      [ROUTE_CHILDREN_SLOT_SENTINEL]?: boolean;
+    };
+
+    return (
+      candidate[ROUTE_CHILDREN_SLOT_SENTINEL] === true ||
+      candidate.displayName === ROUTE_CHILDREN_SLOT_DISPLAY_NAME ||
+      candidate.name === "RouteChildrenSlot"
     );
   } catch {
     return false;
@@ -78,7 +103,7 @@ export function injectRouteChildren(
     return changed ? next : node;
   }
 
-  if (isReactElementLike(node) && isRouteChildrenType(node.type)) {
+  if (isReactElementLike(node) && (isRouteChildrenType(node.type) || isRouteChildrenSlotType(node.type))) {
     return routeChildren;
   }
 
@@ -87,7 +112,7 @@ export function injectRouteChildren(
     return node;
   }
 
-  if (isValidElement && isRouteChildrenType(node.type)) {
+  if (isValidElement && (isRouteChildrenType(node.type) || isRouteChildrenSlotType(node.type))) {
     return routeChildren;
   }
 
