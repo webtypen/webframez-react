@@ -51,6 +51,10 @@ const GLOBAL_BUILD_ID_KEY = "__WEBFRAMEZ_REACT_BUILD_ID";
 const BUILD_ID_HEADER = "x-webframez-react-build";
 const MANAGED_HEAD_SELECTOR = "[data-webframez-head='true']";
 
+type ManagedHeadTag =
+  | { tagName: "meta"; attrs: HeadMetaTag }
+  | { tagName: "link"; attrs: HeadLinkTag };
+
 function scrollToTop() {
   if (typeof window === "undefined" || typeof document === "undefined") {
     return;
@@ -370,6 +374,60 @@ function appendManagedLinkTag(link: HeadLinkTag) {
   document.head.appendChild(element);
 }
 
+function createManagedHeadKey(tagName: string, attrs: Record<string, unknown>) {
+  const normalizedEntries = Object.entries(attrs)
+    .filter(([key, value]) => key !== "data-webframez-head" && Boolean(value))
+    .map(([key, value]) => [key.toLowerCase(), String(value)] as const)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
+
+  return `${tagName.toLowerCase()}:${normalizedEntries
+    .map(([key, value]) => `${key}=${value}`)
+    .join(";")}`;
+}
+
+function createManagedElementKey(element: Element) {
+  const attrs: Record<string, string> = {};
+  for (const attr of Array.from(element.attributes)) {
+    attrs[attr.name] = attr.value;
+  }
+
+  return createManagedHeadKey(element.tagName, attrs);
+}
+
+function collectManagedHeadTags(head: HeadConfig): ManagedHeadTag[] {
+  const tags: ManagedHeadTag[] = [];
+
+  if (head.description) {
+    tags.push({
+      tagName: "meta",
+      attrs: {
+        name: "description",
+        content: head.description,
+      },
+    });
+  }
+
+  if (head.favicon) {
+    tags.push({
+      tagName: "link",
+      attrs: {
+        rel: "icon",
+        href: head.favicon,
+      },
+    });
+  }
+
+  for (const meta of head.meta ?? []) {
+    tags.push({ tagName: "meta", attrs: meta });
+  }
+
+  for (const link of head.links ?? []) {
+    tags.push({ tagName: "link", attrs: link });
+  }
+
+  return tags;
+}
+
 function applyHead(head: HeadConfig) {
   if (typeof document === "undefined") {
     return;
@@ -381,30 +439,34 @@ function applyHead(head: HeadConfig) {
 
   document.title = normalizedHead.title || "Webframez React";
 
+  const desiredManagedTags = collectManagedHeadTags(normalizedHead);
+  const desiredManagedKeys = new Set(
+    desiredManagedTags.map((tag) => createManagedHeadKey(tag.tagName, tag.attrs)),
+  );
+  const mountedManagedKeys = new Set<string>();
+
   for (const managedNode of document.head.querySelectorAll(MANAGED_HEAD_SELECTOR)) {
+    const key = createManagedElementKey(managedNode);
+    if (desiredManagedKeys.has(key) && !mountedManagedKeys.has(key)) {
+      mountedManagedKeys.add(key);
+      continue;
+    }
+
     managedNode.remove();
   }
 
-  if (normalizedHead.description) {
-    appendManagedMetaTag({
-      name: "description",
-      content: normalizedHead.description,
-    });
-  }
+  for (const tag of desiredManagedTags) {
+    const key = createManagedHeadKey(tag.tagName, tag.attrs);
+    if (mountedManagedKeys.has(key)) {
+      continue;
+    }
 
-  if (normalizedHead.favicon) {
-    appendManagedLinkTag({
-      rel: "icon",
-      href: normalizedHead.favicon,
-    });
-  }
-
-  for (const meta of normalizedHead.meta ?? []) {
-    appendManagedMetaTag(meta);
-  }
-
-  for (const link of normalizedHead.links ?? []) {
-    appendManagedLinkTag(link);
+    if (tag.tagName === "meta") {
+      appendManagedMetaTag(tag.attrs);
+    } else {
+      appendManagedLinkTag(tag.attrs);
+    }
+    mountedManagedKeys.add(key);
   }
 }
 
