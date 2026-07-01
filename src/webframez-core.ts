@@ -370,6 +370,7 @@ export function resolveWebframezReactRouteOptions(
       : defaults.styleSrcPath,
     basePath: options.basePath ?? defaults.basePath,
     liveReloadPath: options.liveReloadPath,
+    onData: options.onData,
   };
 }
 

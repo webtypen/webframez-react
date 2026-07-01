@@ -18,6 +18,8 @@ export function createHTMLShell(options: CreateHtmlShellOptions = {}) {
     buildId = "",
     headTags = "",
     bodyClassName = "",
+    bodyStartHtml = "",
+    bodyEndHtml = "",
     rootHtml = "",
     initialFlightData = "",
     basename = "",
@@ -78,7 +80,9 @@ export function createHTMLShell(options: CreateHtmlShellOptions = {}) {
     ${headTags}
   </head>
   <body${bodyClassName ? ` class="${bodyClassName.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}"` : ""}>
+    ${bodyStartHtml}
     <div id="root">${rootHtml}</div>
+    ${bodyEndHtml}
     <script>window.__RSC_ENDPOINT = "${rscEndpoint}";</script>
     <script>window.__RSC_BASENAME = "${basename}";</script>
     <script>window.__RSC_ROUTE_BASE_PATH = "${routeBasePath}";</script>

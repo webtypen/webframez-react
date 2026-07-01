@@ -14,6 +14,7 @@ import type {
   PageProps,
   PageModule,
   RouteContext,
+  RouteDataHook,
   RouteRequestContext,
   RouteMiddlewareConfig,
   RouteMiddlewareRegistry,
@@ -261,6 +262,8 @@ function mergeHead(...configs: Array<HeadConfig | undefined>) {
   const merged: HeadConfig = {
     meta: [],
     links: [],
+    scripts: [],
+    html: [],
   };
 
   for (const candidate of configs) {
@@ -298,9 +301,40 @@ function mergeHead(...configs: Array<HeadConfig | undefined>) {
     if (config.links) {
       merged.links?.push(...config.links);
     }
+    if (config.scripts) {
+      merged.scripts?.push(...config.scripts);
+    }
+    if (config.html) {
+      merged.html?.push(...(Array.isArray(config.html) ? config.html : [config.html]));
+    }
+    if (config.bodyStartHtml) {
+      merged.bodyStartHtml = [merged.bodyStartHtml, config.bodyStartHtml]
+        .filter(Boolean)
+        .join("\n");
+    }
+    if (config.bodyEndHtml) {
+      merged.bodyEndHtml = [merged.bodyEndHtml, config.bodyEndHtml]
+        .filter(Boolean)
+        .join("\n");
+    }
   }
 
   return merged;
+}
+
+function renderGenericAttributes(entry: Record<string, unknown>, excluded: string[] = []) {
+  return Object.entries(entry)
+    .filter(
+      ([key, value]) =>
+        !excluded.includes(key) &&
+        value !== undefined &&
+        value !== null &&
+        value !== false,
+    )
+    .map(([key, value]) =>
+      value === true ? key : `${key}=\"${escapeHtml(String(value))}\"`,
+    )
+    .join(" ");
 }
 
 export function renderHeadToString(head: HeadConfig) {
@@ -333,6 +367,26 @@ export function renderHeadToString(head: HeadConfig) {
       .map(([key, value]) => `${key}=\"${escapeHtml(String(value))}\"`)
       .join(" ");
     tags.push(`<link ${createManagedAttributes()} ${attrs} />`);
+  }
+
+  for (const script of normalizedHead.scripts ?? []) {
+    if (script.html) {
+      tags.push(script.html);
+      continue;
+    }
+
+    const attrs = renderGenericAttributes(script as Record<string, unknown>, [
+      "content",
+      "html",
+    ]);
+    const content = script.content ? String(script.content) : "";
+    tags.push(`<script ${createManagedAttributes()} ${attrs}>${content}</script>`);
+  }
+
+  for (const html of normalizedHead.html ?? []) {
+    if (typeof html === "string" && html.trim() !== "") {
+      tags.push(html);
+    }
   }
 
   return tags.join("\n");
@@ -443,10 +497,11 @@ function isRouteAbort(value: unknown): value is RouteAbort {
   }
 }
 
-export function createFileRouter(options: { pagesDir: string }) {
+export function createFileRouter(options: { pagesDir: string; onData?: RouteDataHook }) {
   installForcedPackageResolution();
 
   const pagesDir = options.pagesDir;
+  const onData = options.onData;
   const layoutPath = path.join(pagesDir, "layout.js");
   const errorPath = path.join(pagesDir, "errors.js");
   const middlewaresPath = path.join(pagesDir, "middlewares.js");
@@ -672,14 +727,22 @@ export function createFileRouter(options: { pagesDir: string }) {
       };
       activeContext = pageContext;
 
-      const pageNode = await pageModule.default(pageContext);
+      const onDataResult =
+        typeof onData === "function" ? await onData(pageContext) : undefined;
+      const eventContext: PageProps = {
+        ...pageContext,
+        data: mergeRouteData(pageContext.data, onDataResult),
+      };
+      activeContext = eventContext;
+
+      const pageNode = await pageModule.default(eventContext);
       const layoutHead = layoutModule
-        ? await resolveHead(layoutModule, pageContext)
+        ? await resolveHead(layoutModule, eventContext)
         : undefined;
-      const pageHead = await resolveHead(pageModule, pageContext);
+      const pageHead = await resolveHead(pageModule, eventContext);
 
       const layoutNode = layoutModule
-        ? await layoutModule.default(pageContext)
+        ? await layoutModule.default(eventContext)
         : null;
       const model = layoutNode
         ? injectRouteChildren(layoutNode, pageNode)
@@ -694,7 +757,7 @@ export function createFileRouter(options: { pagesDir: string }) {
         contextModel,
         pageModel: pageNode,
         head: mergeHead(layoutHead, pageHead),
-        context: pageContext,
+        context: eventContext,
       };
     } catch (error) {
       if (isRouteAbort(error)) {

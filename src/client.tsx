@@ -5,7 +5,13 @@ import type { Root } from "react-dom/client";
 import { RouteChildrenSlotProvider } from "@webtypen/webframez-react/route-slot";
 import { normalizeHeadBasename, normalizeHeadConfig } from "./head";
 import { injectRouteChildren } from "./router-runtime";
-import type { ClientNavigationPayload, HeadConfig, HeadLinkTag, HeadMetaTag } from "./types";
+import type {
+  ClientNavigationPayload,
+  HeadConfig,
+  HeadLinkTag,
+  HeadMetaTag,
+  HeadScriptTag,
+} from "./types";
 
 type ClientOptions = {
   rootId?: string;
@@ -53,7 +59,9 @@ const MANAGED_HEAD_SELECTOR = "[data-webframez-head='true']";
 
 type ManagedHeadTag =
   | { tagName: "meta"; attrs: HeadMetaTag }
-  | { tagName: "link"; attrs: HeadLinkTag };
+  | { tagName: "link"; attrs: HeadLinkTag }
+  | { tagName: "script"; attrs: HeadScriptTag }
+  | { tagName: "html"; attrs: { html: string } };
 
 function scrollToTop() {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -374,6 +382,48 @@ function appendManagedLinkTag(link: HeadLinkTag) {
   document.head.appendChild(element);
 }
 
+function appendManagedScriptTag(script: HeadScriptTag) {
+  if (script.html) {
+    appendManagedHtmlTag(script.html);
+    return;
+  }
+
+  const element = document.createElement("script");
+  element.setAttribute("data-webframez-head", "true");
+
+  const entries = Object.entries(script).filter(
+    ([key, value]) =>
+      key !== "content" &&
+      key !== "html" &&
+      value !== undefined &&
+      value !== null &&
+      value !== false,
+  );
+  for (const [key, value] of entries) {
+    if (value === true) {
+      element.setAttribute(key, "");
+    } else {
+      element.setAttribute(key, String(value));
+    }
+  }
+  if (script.content) {
+    element.textContent = script.content;
+  }
+
+  document.head.appendChild(element);
+}
+
+function appendManagedHtmlTag(html: string) {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  for (const node of Array.from(template.content.childNodes)) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      (node as Element).setAttribute("data-webframez-head", "true");
+    }
+    document.head.appendChild(node);
+  }
+}
+
 function createManagedHeadKey(tagName: string, attrs: Record<string, unknown>) {
   const normalizedEntries = Object.entries(attrs)
     .filter(([key, value]) => key !== "data-webframez-head" && Boolean(value))
@@ -386,6 +436,14 @@ function createManagedHeadKey(tagName: string, attrs: Record<string, unknown>) {
 }
 
 function createManagedElementKey(element: Element) {
+  if (element.tagName.toLowerCase() === "script" && element.textContent) {
+    const attrs: Record<string, string> = { content: element.textContent };
+    for (const attr of Array.from(element.attributes)) {
+      attrs[attr.name] = attr.value;
+    }
+    return createManagedHeadKey(element.tagName, attrs);
+  }
+
   const attrs: Record<string, string> = {};
   for (const attr of Array.from(element.attributes)) {
     attrs[attr.name] = attr.value;
@@ -423,6 +481,16 @@ function collectManagedHeadTags(head: HeadConfig): ManagedHeadTag[] {
 
   for (const link of head.links ?? []) {
     tags.push({ tagName: "link", attrs: link });
+  }
+
+  for (const script of head.scripts ?? []) {
+    tags.push({ tagName: "script", attrs: script });
+  }
+
+  for (const html of head.html ?? []) {
+    if (typeof html === "string" && html.trim() !== "") {
+      tags.push({ tagName: "html", attrs: { html } });
+    }
   }
 
   return tags;
@@ -463,8 +531,12 @@ function applyHead(head: HeadConfig) {
 
     if (tag.tagName === "meta") {
       appendManagedMetaTag(tag.attrs);
-    } else {
+    } else if (tag.tagName === "link") {
       appendManagedLinkTag(tag.attrs);
+    } else if (tag.tagName === "script") {
+      appendManagedScriptTag(tag.attrs);
+    } else {
+      appendManagedHtmlTag(tag.attrs.html);
     }
     mountedManagedKeys.add(key);
   }

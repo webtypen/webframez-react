@@ -103,6 +103,12 @@ function normalizeHeadConfig(head, inheritedBasename) {
       href: resolveHeadAssetUrl(link.href, effectiveBasename)
     }));
   }
+  if (normalizedHead.scripts) {
+    normalizedHead.scripts = normalizedHead.scripts.map((script) => ({
+      ...script,
+      ...script.src ? { src: resolveHeadAssetUrl(script.src, effectiveBasename) } : {}
+    }));
+  }
   return normalizedHead;
 }
 
@@ -355,7 +361,9 @@ function matchRoute(entry, pathname) {
 function mergeHead(...configs) {
   const merged = {
     meta: [],
-    links: []
+    links: [],
+    scripts: [],
+    html: []
   };
   for (const candidate of configs) {
     const config = normalizeHeadConfig(candidate, merged.basename);
@@ -390,8 +398,27 @@ function mergeHead(...configs) {
     if (config.links) {
       merged.links?.push(...config.links);
     }
+    if (config.scripts) {
+      merged.scripts?.push(...config.scripts);
+    }
+    if (config.html) {
+      merged.html?.push(...Array.isArray(config.html) ? config.html : [config.html]);
+    }
+    if (config.bodyStartHtml) {
+      merged.bodyStartHtml = [merged.bodyStartHtml, config.bodyStartHtml].filter(Boolean).join("\n");
+    }
+    if (config.bodyEndHtml) {
+      merged.bodyEndHtml = [merged.bodyEndHtml, config.bodyEndHtml].filter(Boolean).join("\n");
+    }
   }
   return merged;
+}
+function renderGenericAttributes(entry, excluded = []) {
+  return Object.entries(entry).filter(
+    ([key, value]) => !excluded.includes(key) && value !== void 0 && value !== null && value !== false
+  ).map(
+    ([key, value]) => value === true ? key : `${key}="${escapeHtml(String(value))}"`
+  ).join(" ");
 }
 function renderHeadToString(head) {
   const normalizedHead = normalizeHeadConfig(head) ?? head;
@@ -413,6 +440,23 @@ function renderHeadToString(head) {
   for (const link of normalizedHead.links ?? []) {
     const attrs = Object.entries(link).filter(([, value]) => Boolean(value)).map(([key, value]) => `${key}="${escapeHtml(String(value))}"`).join(" ");
     tags.push(`<link ${createManagedAttributes()} ${attrs} />`);
+  }
+  for (const script of normalizedHead.scripts ?? []) {
+    if (script.html) {
+      tags.push(script.html);
+      continue;
+    }
+    const attrs = renderGenericAttributes(script, [
+      "content",
+      "html"
+    ]);
+    const content = script.content ? String(script.content) : "";
+    tags.push(`<script ${createManagedAttributes()} ${attrs}>${content}</script>`);
+  }
+  for (const html of normalizedHead.html ?? []) {
+    if (typeof html === "string" && html.trim() !== "") {
+      tags.push(html);
+    }
   }
   return tags.join("\n");
 }
@@ -499,6 +543,7 @@ function isRouteAbort(value) {
 function createFileRouter(options) {
   installForcedPackageResolution();
   const pagesDir = options.pagesDir;
+  const onData = options.onData;
   const layoutPath = import_node_path.default.join(pagesDir, "layout.js");
   const errorPath = import_node_path.default.join(pagesDir, "errors.js");
   const middlewaresPath = import_node_path.default.join(pagesDir, "middlewares.js");
@@ -663,10 +708,16 @@ function createFileRouter(options) {
         data: mergeRouteData(middlewareContext.data, pageData)
       };
       activeContext = pageContext;
-      const pageNode = await pageModule.default(pageContext);
-      const layoutHead = layoutModule ? await resolveHead(layoutModule, pageContext) : void 0;
-      const pageHead = await resolveHead(pageModule, pageContext);
-      const layoutNode = layoutModule ? await layoutModule.default(pageContext) : null;
+      const onDataResult = typeof onData === "function" ? await onData(pageContext) : void 0;
+      const eventContext = {
+        ...pageContext,
+        data: mergeRouteData(pageContext.data, onDataResult)
+      };
+      activeContext = eventContext;
+      const pageNode = await pageModule.default(eventContext);
+      const layoutHead = layoutModule ? await resolveHead(layoutModule, eventContext) : void 0;
+      const pageHead = await resolveHead(pageModule, eventContext);
+      const layoutNode = layoutModule ? await layoutModule.default(eventContext) : null;
       const model = layoutNode ? injectRouteChildren(layoutNode, pageNode) : pageNode;
       const contextModel = layoutNode ? injectRouteChildren(layoutNode, /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RouteChildren, {})) : void 0;
       return {
@@ -675,7 +726,7 @@ function createFileRouter(options) {
         contextModel,
         pageModel: pageNode,
         head: mergeHead(layoutHead, pageHead),
-        context: pageContext
+        context: eventContext
       };
     } catch (error) {
       if (isRouteAbort(error)) {

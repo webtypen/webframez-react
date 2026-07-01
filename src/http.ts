@@ -11,7 +11,12 @@ import {
 } from "node:zlib";
 import { createHTMLShell, renderRSCToString, sendRSC } from "./server";
 import { createFileRouter, parseSearchParams, renderHeadToString } from "./router";
-import type { ClientNavigationPayload, RouteContext, RouteRequestContext } from "./types";
+import type {
+  ClientNavigationPayload,
+  RouteContext,
+  RouteDataHook,
+  RouteRequestContext,
+} from "./types";
 
 export type WebframezReactRoutePath = `/${string}` | "/";
 export type WebframezReactAssetsPrefix = `${WebframezReactRoutePath}/` | "/";
@@ -33,6 +38,7 @@ export interface CreateNodeHandlerRoutingOptions {
 export interface CreateNodeHandlerOptions
   extends CreateNodeHandlerPathsOptions,
     CreateNodeHandlerRoutingOptions {
+  onData?: RouteDataHook;
 }
 
 type CoreRequestBridge = {
@@ -1105,7 +1111,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       : options.liveReloadPath ?? `${basePath || ""}/__webframez_live_reload`;
   const liveReloadClients = new Set<ServerResponse>();
 
-  const router = createFileRouter({ pagesDir });
+  const router = createFileRouter({ pagesDir, onData: options.onData });
   const getManifestState = createManifestLoader({
     distRootDir,
     manifestPath,
@@ -1350,6 +1356,8 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         initialFlightData,
         basename: shellBasename,
         routeBasePath: shellRouteBasePath,
+        bodyStartHtml: resolved.head.bodyStartHtml || "",
+        bodyEndHtml: resolved.head.bodyEndHtml || "",
         liveReloadPath: liveReloadPath || undefined,
         liveReloadServerId: liveReloadPath ? devServerId : undefined,
       }),

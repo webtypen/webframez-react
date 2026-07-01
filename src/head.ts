@@ -88,5 +88,12 @@ export function normalizeHeadConfig(head?: HeadConfig, inheritedBasename?: strin
     }));
   }
 
+  if (normalizedHead.scripts) {
+    normalizedHead.scripts = normalizedHead.scripts.map((script) => ({
+      ...script,
+      ...(script.src ? { src: resolveHeadAssetUrl(script.src, effectiveBasename) } : {}),
+    }));
+  }
+
   return normalizedHead;
 }

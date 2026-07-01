@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { RouteDataHook } from "./types";
 
 export type WebframezReactRoutePath = `/${string}` | "/";
 export type WebframezReactAssetsPrefix = `${WebframezReactRoutePath}/` | "/";
@@ -20,6 +21,7 @@ export interface CreateNodeHandlerRoutingOptions {
 export interface CreateNodeHandlerOptions
   extends CreateNodeHandlerPathsOptions,
     CreateNodeHandlerRoutingOptions {
+  onData?: RouteDataHook;
 }
 
 export function createNodeRequestHandler(

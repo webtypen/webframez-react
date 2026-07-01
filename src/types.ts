@@ -57,6 +57,19 @@ export type HeadLinkTag = {
   media?: string;
 };
 
+export type HeadScriptTag = {
+  id?: string;
+  src?: string;
+  type?: string;
+  async?: boolean;
+  defer?: boolean;
+  content?: string;
+  html?: string;
+  integrity?: string;
+  crossOrigin?: string;
+  referrerPolicy?: string;
+};
+
 export type HeadConfig = {
   title?: string;
   description?: string;
@@ -67,6 +80,10 @@ export type HeadConfig = {
   favicon?: string;
   meta?: HeadMetaTag[];
   links?: HeadLinkTag[];
+  scripts?: HeadScriptTag[];
+  html?: string[];
+  bodyStartHtml?: string;
+  bodyEndHtml?: string;
 };
 
 export type ClientNavigationPayload = {
@@ -83,6 +100,11 @@ export type HeadResolver<TContext = RouteContext> = (
 export type PageDataResolver<TData = any> = (
   context: RouteContext,
 ) => TData | Promise<TData>;
+
+export type RouteDataHookResult = Record<string, unknown> | undefined | void;
+export type RouteDataHook<TData = any> = (
+  context: RouteContext<TData>,
+) => RouteDataHookResult | Promise<RouteDataHookResult>;
 
 export type RouteMiddlewareResult = Record<string, unknown> | undefined | void;
 export type RouteMiddlewareResolver<TData = any> = (
@@ -119,6 +141,8 @@ export type CreateHtmlShellOptions = {
   buildId?: string;
   headTags?: string;
   bodyClassName?: string;
+  bodyStartHtml?: string;
+  bodyEndHtml?: string;
   rootHtml?: string;
   initialFlightData?: string;
   basename?: string;
