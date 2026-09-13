@@ -491,3 +491,64 @@ Watch mode for package development:
 ```bash
 npm run build:watch
 ```
+
+## Persistent navigation in consuming applications
+
+Use the host router's Link component for URLs. Keep the Suite renderer mounted
+across paths inside one authorized project; do not add `key={path}` or conditionally
+unmount it while reloading project context. Revalidate/reset the context when the
+project changes, and continue enforcing authorization on every server request.
+Only the page content resets for a new screen. The renderer retains its layout and
+prior page while a same-project request is pending, with stale interactions disabled.
+
+For webframez-react, configure the DOM link adapter at the host boundary:
+
+```tsx
+import React from "react";
+import { Link } from "@webtypen/webframez-react/navigation";
+
+const SuiteLink = React.forwardRef<HTMLAnchorElement,
+  React.AnchorHTMLAttributes<HTMLAnchorElement>
+>(function SuiteLink({ href, ...props }, ref) {
+  return <Link {...props} ref={ref} to={href || "#"} basename="" />;
+});
+
+// Inside an already authorized project context; paths are fully qualified.
+<NativeDesignProvider
+  key={projectId}
+  suite={{ endpoint: "/manager", navigation: {
+    pathname, linkComponent: SuiteLink,
+    onNavigate: to => router.push(to),
+  } }}
+>
+  <WebframezSuiteRenderer />
+</NativeDesignProvider>
+```
+
+Screen definitions remain JSON-serializable: links use `to`/`path`; React Link
+components belong in the consuming application's adapter, never in server schemas.
+See `AGENTS.md` for the navigation invariants and regression-test requirements.
+
+
+## Core router basename
+
+With the updated Core router, set `application.router.basename` in the Core
+configuration. `initWebframezReact(Route).renderReact("/", options)` inherits it;
+no duplicate `basePath`, `assetsPrefix`, `rscPath`, `clientScriptUrl`, or
+`Head.basename` is needed. Nested render routes and `Route.group` prefixes are
+included in the runtime mount while build target names and directories stay
+stable. Explicit external asset URLs remain unchanged. Without Core, the Node
+handler still supports `basePath` and explicit transport URLs.
+
+For API calls, form actions, raw links and redirects in shared/client code:
+
+```ts
+import { appPath, appRelativePath, getBasename } from "@webtypen/webframez-react/paths";
+fetch(appPath("/api/items"));
+```
+
+These browser-safe helpers bundle Core's URL logic and read the runtime mount;
+no server dependencies are included. `Link` and `Redirect` inherit it
+implicitly. Server requests use an async-local context, and HTML rendering and
+client navigation receive the same basename through the Flight head and HTML
+shell. External URLs and already-prefixed URLs are preserved.

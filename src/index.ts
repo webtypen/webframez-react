@@ -4,3 +4,5 @@ export { createNodeRequestHandler } from "./http";
 export * from "./webframez-core";
 export type { CreateNodeHandlerOptions } from "./http";
 export type * from "./types";
+
+export { renderReactToHtml, disposeReactHtmlRenderer } from "./http";

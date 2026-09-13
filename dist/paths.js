@@ -1,4 +1,3 @@
-"use client";
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -80,127 +79,15 @@ var require_routing2 = __commonJS({
   }
 });
 
-// src/navigation.tsx
-import React from "react";
-
 // src/paths.ts
 var import_routing = __toESM(require_routing2(), 1);
-
-// src/navigation.tsx
-import { jsx } from "react/jsx-runtime";
-function getClientRouter() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const value = window.__WEBFRAMEZ_ROUTER__;
-  return value ?? null;
-}
-function withLeadingSlash(value) {
-  return value.startsWith("/") ? value : `/${value}`;
-}
-function normalizeBase(base) {
-  if (!base || base.trim() === "" || base === "/") {
-    return "";
-  }
-  const withSlash = withLeadingSlash(base.trim());
-  return withSlash.endsWith("/") ? withSlash.slice(0, -1) : withSlash;
-}
-function isExternal(href) {
-  return /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(href) || href.startsWith("//");
-}
-function navigateWithClientRouter(href, mode = "push") {
-  const router = getClientRouter();
-  if (router) {
-    router[mode](href);
-    return;
-  }
-  window.setTimeout(() => {
-    const nextRouter = getClientRouter();
-    if (nextRouter) {
-      nextRouter[mode](href);
-      return;
-    }
-    if (mode === "replace") {
-      window.location.replace(href);
-    } else {
-      window.location.assign(href);
-    }
-  }, 0);
-}
-function resolveHref(to, basename) {
-  if (!to || to.trim() === "") {
-    return "/";
-  }
-  const trimmed = to.trim();
-  if (isExternal(trimmed) || trimmed.startsWith("#")) {
-    return trimmed;
-  }
-  const [pathPart, hashPart] = trimmed.split("#", 2);
-  const [pathnamePart, queryPart] = pathPart.split("?", 2);
-  const pathname = withLeadingSlash(pathnamePart || "/");
-  const base = normalizeBase(basename);
-  let resolvedPath = pathname;
-  if (base && pathname !== "/" && !pathname.startsWith(`${base}/`) && pathname !== base) {
-    resolvedPath = `${base}${pathname}`;
-  } else if (base && pathname === "/") {
-    resolvedPath = base;
-  }
-  const query = queryPart ? `?${queryPart}` : "";
-  const hash = hashPart ? `#${hashPart}` : "";
-  return `${resolvedPath}${query}${hash}`;
-}
-var Link = React.forwardRef(function Link2({ to, basename, onClick, ...rest }, ref) {
-  const resolvedHref = resolveHref(to, basename ?? (0, import_routing.getBasename)());
-  const isServerRender = typeof window === "undefined";
-  return /* @__PURE__ */ jsx(
-    "a",
-    {
-      ...rest,
-      ref,
-      href: resolvedHref,
-      onClick: isServerRender ? void 0 : (event) => {
-        onClick?.(event);
-        if (event.defaultPrevented) {
-          return;
-        }
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-          return;
-        }
-        if (rest.download != null && rest.download !== false)
-          return;
-        if (rest.target && rest.target !== "_self") {
-          return;
-        }
-        if (isExternal(resolvedHref)) {
-          return;
-        }
-        event.preventDefault();
-        navigateWithClientRouter(resolvedHref);
-      }
-    }
-  );
-});
-function Redirect({ to, basename, replace = true }) {
-  const resolvedHref = resolveHref(to, basename ?? (0, import_routing.getBasename)());
-  if (typeof window !== "undefined") {
-    const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (resolvedHref !== currentHref) {
-      setTimeout(() => {
-        if (isExternal(resolvedHref)) {
-          if (replace) {
-            window.location.replace(resolvedHref);
-          } else {
-            window.location.assign(resolvedHref);
-          }
-          return;
-        }
-        navigateWithClientRouter(resolvedHref, replace ? "replace" : "push");
-      }, 0);
-    }
-  }
-  return null;
-}
+var export_appPath = import_routing.appPath;
+var export_appRelativePath = import_routing.appRelativePath;
+var export_getBasename = import_routing.getBasename;
+var export_normalizeBasename = import_routing.normalizeBasename;
 export {
-  Link,
-  Redirect
+  export_appPath as appPath,
+  export_appRelativePath as appRelativePath,
+  export_getBasename as getBasename,
+  export_normalizeBasename as normalizeBasename
 };

@@ -1,0 +1,9 @@
+# Navigation and persistent Suite layouts
+
+- Use real router links for navigation: an anchor with a usable `href`, not a button calling `router.push`. Preserve modified clicks, middle click, keyboard activation, target, download and forwarded refs. Buttons remain appropriate for mutations, submitting forms, logout and local state changes.
+- Keep `WebframezSuiteRenderer` and its layout mounted across page changes within the same authorized project. Never use `key={pathname}` on the renderer, provider or AdminLayout, or replace them with a loading branch on every pathname change.
+- Key only the page content by screen/entity identity when its local form state must reset. Key the provider/renderer by an authorization boundary (tenant/project/account) when that boundary changes; never display stale data across that boundary.
+- Configure `NativeDesignProvider.suite.navigation.linkComponent` with the host router's anchor-compatible Link adapter. Keep callbacks for programmatic redirects, refresh and native platforms. Native Design must not import a specific web router.
+- Keep project context validation separate from per-page loading. Every screen/action API still enforces authorization. Abort superseded requests and ignore their results. On 401/403, show the appropriate error or redirect instead of displaying stale protected content.
+- During same-context loading, retain the prior layout and page, mark the page busy and prevent stale interactions. Replace only the page after a successful response; do not replace the entire layout with a loading message.
+- Test layout mount counts/state across navigation, loading and error responses, rapid navigation, project-boundary resets, ordinary/modified link clicks, and browser back/forward behavior. HTTP 200 alone does not verify the rendered UI.

@@ -10,6 +10,7 @@ const sharedNode = {
     "src/router.ts",
     "src/types.ts",
     "src/http.ts",
+    "src/paths.ts",
     "src/webframez-core.ts",
     "src/navigation.tsx",
     "src/route-slot.tsx",
@@ -22,6 +23,14 @@ const sharedNode = {
   target: "node20",
   jsx: "automatic",
   legalComments: "none",
+  plugins: [{
+    name: "core-peer",
+    setup(build) {
+      // Keep the optional server peer external, but bundle its browser-safe
+      // routing subpath so standalone React/browser consumers need no Core.
+      build.onResolve({ filter: /^@webtypen\/webframez-core$/ }, ({ path }) => ({ path, external: true }));
+    },
+  }],
   external: [
     "react",
     "react-dom",
@@ -29,7 +38,6 @@ const sharedNode = {
     "react-server-dom-webpack",
     "react-server-dom-webpack/client.node",
     "node:*",
-    "@webtypen/webframez-core",
     "@webtypen/webframez-react/route-slot",
   ],
 };
@@ -55,6 +63,7 @@ const sharedClient = {
 async function copyTypes() {
   await mkdir("dist", { recursive: true });
   await copyFile("src/index.d.ts", "dist/index.d.ts");
+  await copyFile("src/paths.d.ts", "dist/paths.d.ts");
   await copyFile("src/router.d.ts", "dist/router.d.ts");
   await copyFile("src/types.d.ts", "dist/types.d.ts");
   await copyFile("src/client.d.ts", "dist/client.d.ts");

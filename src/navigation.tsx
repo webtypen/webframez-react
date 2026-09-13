@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { getBasename } from "./paths";
 
 type BasenameOption = {
   basename?: string;
@@ -11,19 +12,6 @@ type RouterLike = {
   replace: (href: string) => void;
 };
 
-function getDefaultBasename() {
-  const globalValue = (globalThis as { __RSC_BASENAME?: string }).__RSC_BASENAME;
-  if (globalValue && globalValue !== "/") {
-    return globalValue;
-  }
-
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  const value = (window as Window & { __RSC_BASENAME?: string }).__RSC_BASENAME;
-  return value && value !== "/" ? value : "";
-}
 
 function getClientRouter(): RouterLike | null {
   if (typeof window === "undefined") {
@@ -105,13 +93,14 @@ export type LinkProps = Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "hre
   basename?: string;
 };
 
-export function Link({ to, basename, onClick, ...rest }: LinkProps) {
-  const resolvedHref = resolveHref(to, basename ?? getDefaultBasename());
+export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(function Link({ to, basename, onClick, ...rest }, ref) {
+  const resolvedHref = resolveHref(to, basename ?? getBasename());
   const isServerRender = typeof window === "undefined";
 
   return (
     <a
       {...rest}
+      ref={ref}
       href={resolvedHref}
       onClick={
         isServerRender
@@ -124,6 +113,7 @@ export function Link({ to, basename, onClick, ...rest }: LinkProps) {
               if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
                 return;
               }
+              if (rest.download != null && rest.download !== false) return;
               if (rest.target && rest.target !== "_self") {
                 return;
               }
@@ -137,7 +127,7 @@ export function Link({ to, basename, onClick, ...rest }: LinkProps) {
       }
     />
   );
-}
+});
 
 export type RedirectProps = BasenameOption & {
   to: string;
@@ -145,7 +135,7 @@ export type RedirectProps = BasenameOption & {
 };
 
 export function Redirect({ to, basename, replace = true }: RedirectProps) {
-  const resolvedHref = resolveHref(to, basename ?? getDefaultBasename());
+  const resolvedHref = resolveHref(to, basename ?? getBasename());
 
   if (typeof window !== "undefined") {
     const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`;

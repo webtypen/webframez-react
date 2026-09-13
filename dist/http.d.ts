@@ -27,3 +27,6 @@ export interface CreateNodeHandlerOptions
 export function createNodeRequestHandler(
   options: CreateNodeHandlerOptions
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+
+export function renderReactToHtml(element: unknown): Promise<string>;
+export function disposeReactHtmlRenderer(): void;

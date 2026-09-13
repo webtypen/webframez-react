@@ -37,6 +37,7 @@ type ResolveInput = {
   request?: RouteRequestContext;
 };
 
+// Transitive dependencies (e.g. scheduler) must resolve from their importer.
 const FORCED_PACKAGE_REQUESTS = [
   "@webtypen/webframez-core",
   "@webtypen/webframez-react",
@@ -51,7 +52,6 @@ const FORCED_PACKAGE_REQUESTS = [
   "react-server-dom-webpack/server",
   "react-server-dom-webpack/client",
   "react-server-dom-webpack/client.node",
-  "scheduler",
 ] as const;
 let forcedPackageResolutionInstalled = false;
 

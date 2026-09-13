@@ -25,3 +25,5 @@ export function createRSCHandler(options: {
 export function createNodeRequestHandler(
   options: CreateNodeHandlerOptions
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+
+export { renderReactToHtml, disposeReactHtmlRenderer } from "./http";

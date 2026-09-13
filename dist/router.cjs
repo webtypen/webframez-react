@@ -221,8 +221,7 @@ var FORCED_PACKAGE_REQUESTS = [
   "react-server-dom-webpack",
   "react-server-dom-webpack/server",
   "react-server-dom-webpack/client",
-  "react-server-dom-webpack/client.node",
-  "scheduler"
+  "react-server-dom-webpack/client.node"
 ];
 var forcedPackageResolutionInstalled = false;
 function normalizePathname(pathname) {

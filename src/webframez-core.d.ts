@@ -39,14 +39,8 @@ export interface WebframezCoreRouteFacadeExtensions {
   reactRender(path: string, options?: WebframezCoreReactRenderRouteOptions): void;
 }
 
-declare module "@webtypen/webframez-core" {
-  interface RouteFacade extends WebframezCoreRouteFacadeExtensions {}
-}
-
-declare module "webframez-core" {
-  interface RouteFacade extends WebframezCoreRouteFacadeExtensions {}
-}
-
+// Augment the defining module; the package root re-exports this same class.
+// Also augmenting the root creates conflicting polymorphic `this` types.
 declare module "@webtypen/webframez-core/dist/Router/Route" {
   interface RouteFacade extends WebframezCoreRouteFacadeExtensions {}
 }

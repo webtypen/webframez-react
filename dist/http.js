@@ -7,6 +7,7 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
 });
 
 // src/http.ts
+import { AsyncLocalStorage } from "node:async_hooks";
 import fs2 from "node:fs";
 import path3 from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -321,8 +322,7 @@ var FORCED_PACKAGE_REQUESTS = [
   "react-server-dom-webpack",
   "react-server-dom-webpack/server",
   "react-server-dom-webpack/client",
-  "react-server-dom-webpack/client.node",
-  "scheduler"
+  "react-server-dom-webpack/client.node"
 ];
 var forcedPackageResolutionInstalled = false;
 function normalizePathname(pathname) {
@@ -973,6 +973,7 @@ const rootParent = {
   path: process.cwd(),
   paths: Module._nodeModulePaths(process.cwd()),
 };
+// Transitive dependencies (e.g. scheduler) must resolve from their importer.
 const forcedPackageRequests = [
   "@webtypen/webframez-core",
   "@webtypen/webframez-react",
@@ -987,7 +988,6 @@ const forcedPackageRequests = [
   "react-server-dom-webpack/server",
   "react-server-dom-webpack/client",
   "react-server-dom-webpack/client.node",
-  "scheduler"
 ];
 
 function shouldForcePackageResolution(request) {
@@ -1179,13 +1179,17 @@ async function renderHtmlFromFlightData(flightData, moduleMap) {
       ? payload.head.basename
       : "";
 
-  const previousBasename = globalThis.__RSC_BASENAME;
-  globalThis.__RSC_BASENAME = basename;
-  try {
-    return await renderHtml(model);
-  } finally {
-    globalThis.__RSC_BASENAME = previousBasename;
-  }
+  const routingContext = globalThis.__WEBFRAMEZ_ROUTING_CONTEXT__ ??=
+    new (require("node:async_hooks").AsyncLocalStorage)();
+  return routingContext.run(basename, async () => {
+    const previousBasename = globalThis.__RSC_BASENAME;
+    globalThis.__RSC_BASENAME = basename;
+    try {
+      return await renderHtml(model);
+    } finally {
+      globalThis.__RSC_BASENAME = previousBasename;
+    }
+  });
 }
 
 process.on("message", async (message) => {
@@ -1421,24 +1425,10 @@ ${stderrBuffer.trim()}` : "";
     }
   };
 }
+var routingRuntime = globalThis;
+var basenameContext = routingRuntime.__WEBFRAMEZ_ROUTING_CONTEXT__ ??= new AsyncLocalStorage();
 function withRequestBasename(basename, fn) {
-  const target = globalThis;
-  const previous = target.__RSC_BASENAME;
-  target.__RSC_BASENAME = basename;
-  const finish = () => {
-    target.__RSC_BASENAME = previous;
-  };
-  try {
-    const result = fn();
-    if (result && typeof result.then === "function") {
-      return result.finally(finish);
-    }
-    finish();
-    return result;
-  } catch (error) {
-    finish();
-    throw error;
-  }
+  return basenameContext.run(basename, fn);
 }
 function parseCookies(rawCookieHeader) {
   const raw = Array.isArray(rawCookieHeader) ? rawCookieHeader.join("; ") : rawCookieHeader ?? "";
@@ -1473,12 +1463,27 @@ function normalizeClientManifest(manifest, options) {
     }
   };
   for (const [key, value] of Object.entries(manifest)) {
+    const hashIndex = key.indexOf("#");
+    const moduleKey = hashIndex < 0 ? key : key.slice(0, hashIndex);
+    const exportSuffix = hashIndex < 0 ? "" : key.slice(hashIndex);
+    if (!path3.isAbsolute(moduleKey) && !moduleKey.includes(":") && !moduleKey.startsWith("file://")) {
+      const runtimePath = path3.resolve(options.cwd, moduleKey);
+      const allowedRoots = [options.distRootDir, ...candidateNodeModulesDirs];
+      const insideArtifact = allowedRoots.some((root) => {
+        const relative = path3.relative(path3.resolve(root), runtimePath);
+        return relative !== "" && relative !== ".." && !relative.startsWith(`..${path3.sep}`) && !path3.isAbsolute(relative);
+      });
+      if (insideArtifact) {
+        addAlias(`${runtimePath}${exportSuffix}`, value);
+        addAlias(`${pathToFileURL(runtimePath).href}${exportSuffix}`, value);
+      }
+    }
     if (!key.startsWith("file://")) {
       continue;
     }
     let absolutePath = "";
     try {
-      absolutePath = fileURLToPath(key);
+      absolutePath = fileURLToPath(moduleKey);
     } catch {
       continue;
     }
@@ -1489,13 +1494,13 @@ function normalizeClientManifest(manifest, options) {
     }
     const relativeModulePath = absolutePath.slice(markerIndex + marker.length);
     const relativeModulePathPosix = relativeModulePath.split(path3.sep).join("/");
-    addAlias(`./node_modules/${relativeModulePathPosix}`, value);
-    addAlias(`node_modules/${relativeModulePathPosix}`, value);
-    addAlias(absolutePath, value);
+    addAlias(`./node_modules/${relativeModulePathPosix}${exportSuffix}`, value);
+    addAlias(`node_modules/${relativeModulePathPosix}${exportSuffix}`, value);
+    addAlias(`${absolutePath}${exportSuffix}`, value);
     for (const nodeModulesDir of candidateNodeModulesDirs) {
       const aliasPath = path3.join(nodeModulesDir, relativeModulePath);
-      addAlias(aliasPath, value);
-      addAlias(pathToFileURL(aliasPath).href, value);
+      addAlias(`${aliasPath}${exportSuffix}`, value);
+      addAlias(`${pathToFileURL(aliasPath).href}${exportSuffix}`, value);
     }
   }
   return normalized;
@@ -1640,10 +1645,10 @@ function createNodeRequestHandler(options) {
   const manifestPath = path3.resolve(
     options.manifestPath ?? path3.join(distRootDir, "react-client-manifest.json")
   );
-  const assetsPrefix = options.assetsPrefix ?? "/assets/";
-  const rscPath = options.rscPath ?? "/rsc";
-  const clientScriptUrl = options.clientScriptUrl ?? "/assets/client.js";
   const basePath = normalizeBasePath(options.basePath);
+  const assetsPrefix = options.assetsPrefix ?? `${basePath}/assets/`;
+  const rscPath = options.rscPath ?? `${basePath}/rsc`;
+  const clientScriptUrl = options.clientScriptUrl ?? `${basePath}/assets/client.js`;
   const nodeEnv = process.env.NODE_ENV || "";
   const runningInWatchMode = Array.isArray(process.execArgv) && process.execArgv.includes("--watch");
   const liveReloadEnabled = options.liveReloadPath !== false && (nodeEnv === "development" || runningInWatchMode);
@@ -1662,7 +1667,7 @@ function createNodeRequestHandler(options) {
   process.once("exit", disposeInitialHtmlWorker);
   process.once("SIGINT", disposeInitialHtmlWorker);
   process.once("SIGTERM", disposeInitialHtmlWorker);
-  return async function handleRequest(req, res) {
+  const handleRequest = async (req, res) => {
     if (!req.url) {
       res.statusCode = 400;
       res.end("Bad request");
@@ -1726,6 +1731,7 @@ function createNodeRequestHandler(options) {
           request: requestContext
         })
       );
+      resolved2.head = { ...resolved2.head, basename: resolved2.head.basename ?? basePath };
       attachResolvedContextToCoreRequest(req, resolved2.context);
       const payload = {
         model: resolved2.model,
@@ -1801,6 +1807,7 @@ function createNodeRequestHandler(options) {
         )
       })
     );
+    resolved.head = { ...resolved.head, basename: resolved.head.basename ?? basePath };
     attachResolvedContextToCoreRequest(req, resolved.context);
     const initialPayload = {
       model: resolved.model,
@@ -1886,7 +1893,29 @@ function createNodeRequestHandler(options) {
       }
     );
   };
+  return (req, res) => withRequestBasename(basePath, () => handleRequest(req, res));
+}
+var standaloneHtmlWorker;
+async function renderReactToHtml(element) {
+  if (!standaloneHtmlWorker) {
+    standaloneHtmlWorker = createInitialHtmlWorker(process.cwd());
+    process.once("exit", disposeReactHtmlRenderer);
+  }
+  const flightData = await renderRSCToString({ model: element }, {
+    moduleMap: {},
+    onError: (error) => {
+      console.error("[webframez-react] HTML render failed", error);
+    }
+  });
+  return standaloneHtmlWorker.renderFromFlightData({ flightData, moduleMap: {} });
+}
+function disposeReactHtmlRenderer() {
+  process.removeListener("exit", disposeReactHtmlRenderer);
+  standaloneHtmlWorker?.dispose();
+  standaloneHtmlWorker = void 0;
 }
 export {
-  createNodeRequestHandler
+  createNodeRequestHandler,
+  disposeReactHtmlRenderer,
+  renderReactToHtml
 };

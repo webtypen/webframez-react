@@ -1,9 +1,12 @@
 const fs = require("fs");
 const path = require("path");
-const ReactFlightWebpackPlugin = require("react-server-dom-webpack/plugin");
+const { createRequire } = require("node:module");
 const { fileURLToPath, pathToFileURL } = require("url");
 
 const projectRoot = process.cwd();
+const projectRequire = createRequire(path.join(projectRoot, "package.json"));
+const ReactFlightWebpackPlugin = projectRequire("react-server-dom-webpack/plugin");
+const reactDomRequire = createRequire(projectRequire.resolve("react-dom/package.json"));
 const frameworkDistDir = path.resolve(__dirname, "..", "dist");
 const clientEntry = process.env.WEBFRAMEZ_REACT_CLIENT_ENTRY
   ? path.resolve(projectRoot, process.env.WEBFRAMEZ_REACT_CLIENT_ENTRY)
@@ -266,7 +269,8 @@ module.exports = {
       "react-dom": path.resolve(projectRoot, "node_modules", "react-dom"),
       "react/jsx-runtime": path.resolve(projectRoot, "node_modules", "react", "jsx-runtime.js"),
       "react/jsx-dev-runtime": path.resolve(projectRoot, "node_modules", "react", "jsx-dev-runtime.js"),
-      scheduler: path.resolve(projectRoot, "node_modules", "scheduler"),
+      // Resolve React DOM's own scheduler, including pnpm's isolated layout.
+      scheduler: path.dirname(reactDomRequire.resolve("scheduler/package.json")),
     },
   },
   watchOptions: {

@@ -4,6 +4,9 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -26,6 +29,61 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
+// ../webframez-core/dist/routing.js
+var require_routing = __commonJS({
+  "../webframez-core/dist/routing.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.appRelativePath = exports2.appPath = exports2.getBasename = exports2.normalizeBasename = void 0;
+    function normalizeBasename2(value) {
+      if (value == null || value === "" || value === "/")
+        return "";
+      if (typeof value !== "string")
+        throw new Error("Router basename must be a string.");
+      const base = value.trim().replace(/\/+$/, "");
+      if (!base && value.trim().length <= 1)
+        return "";
+      if (!/^\/(?:[A-Za-z0-9_~-]+(?:\.[A-Za-z0-9_~-]+)*)(?:\/[A-Za-z0-9_~-]+(?:\.[A-Za-z0-9_~-]+)*)*$/.test(base)) {
+        throw new Error("Router basename must be empty or an absolute path such as /my-app.");
+      }
+      return base;
+    }
+    exports2.normalizeBasename = normalizeBasename2;
+    function getBasename2() {
+      var _a, _b, _c, _d;
+      const runtime = globalThis;
+      return (_d = (_c = (_b = (_a = runtime.__WEBFRAMEZ_ROUTING_CONTEXT__) === null || _a === void 0 ? void 0 : _a.getStore()) !== null && _b !== void 0 ? _b : runtime.__RSC_BASENAME) !== null && _c !== void 0 ? _c : runtime.__WEBFRAMEZ_ROUTER_BASENAME__) !== null && _d !== void 0 ? _d : "";
+    }
+    exports2.getBasename = getBasename2;
+    function appPath2(value, basename = getBasename2()) {
+      const base = normalizeBasename2(basename);
+      if (!base || !value.startsWith("/") || value.startsWith("//") || hasBasename(value, base))
+        return value;
+      return base + value;
+    }
+    exports2.appPath = appPath2;
+    function appRelativePath2(value, basename = getBasename2()) {
+      const base = normalizeBasename2(basename);
+      if (!base || !hasBasename(value, base))
+        return value;
+      const relative = value.slice(base.length);
+      return !relative || relative.startsWith("?") || relative.startsWith("#") ? "/" + relative : relative;
+    }
+    exports2.appRelativePath = appRelativePath2;
+    function hasBasename(value, base) {
+      return value === base || value.startsWith(base + "/") || value.startsWith(base + "?") || value.startsWith(base + "#");
+    }
+  }
+});
+
+// ../webframez-core/routing.js
+var require_routing2 = __commonJS({
+  "../webframez-core/routing.js"(exports2, module2) {
+    "use strict";
+    module2.exports = require_routing();
+  }
+});
+
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
@@ -35,10 +93,12 @@ __export(src_exports, {
   createHTMLShell: () => createHTMLShell,
   createNodeRequestHandler: () => createNodeRequestHandler,
   createRSCHandler: () => createRSCHandler,
+  disposeReactHtmlRenderer: () => disposeReactHtmlRenderer,
   getRegisteredReactBuildTargets: () => getRegisteredReactBuildTargets,
   initWebframezReact: () => initWebframezReact,
   parseSearchParams: () => parseSearchParams,
   renderHeadToString: () => renderHeadToString,
+  renderReactToHtml: () => renderReactToHtml,
   resolveWebframezReactRouteOptions: () => resolveWebframezReactRouteOptions,
   sendRSC: () => sendRSC,
   setupWebframezCoreReactRoute: () => setupWebframezCoreReactRoute
@@ -376,8 +436,7 @@ var FORCED_PACKAGE_REQUESTS = [
   "react-server-dom-webpack",
   "react-server-dom-webpack/server",
   "react-server-dom-webpack/client",
-  "react-server-dom-webpack/client.node",
-  "scheduler"
+  "react-server-dom-webpack/client.node"
 ];
 var forcedPackageResolutionInstalled = false;
 function normalizePathname(pathname) {
@@ -901,6 +960,7 @@ function parseSearchParams(query) {
 }
 
 // src/http.ts
+var import_node_async_hooks = require("node:async_hooks");
 var import_node_fs2 = __toESM(require("node:fs"), 1);
 var import_node_path3 = __toESM(require("node:path"), 1);
 var import_node_url = require("node:url");
@@ -1033,6 +1093,7 @@ const rootParent = {
   path: process.cwd(),
   paths: Module._nodeModulePaths(process.cwd()),
 };
+// Transitive dependencies (e.g. scheduler) must resolve from their importer.
 const forcedPackageRequests = [
   "@webtypen/webframez-core",
   "@webtypen/webframez-react",
@@ -1047,7 +1108,6 @@ const forcedPackageRequests = [
   "react-server-dom-webpack/server",
   "react-server-dom-webpack/client",
   "react-server-dom-webpack/client.node",
-  "scheduler"
 ];
 
 function shouldForcePackageResolution(request) {
@@ -1239,13 +1299,17 @@ async function renderHtmlFromFlightData(flightData, moduleMap) {
       ? payload.head.basename
       : "";
 
-  const previousBasename = globalThis.__RSC_BASENAME;
-  globalThis.__RSC_BASENAME = basename;
-  try {
-    return await renderHtml(model);
-  } finally {
-    globalThis.__RSC_BASENAME = previousBasename;
-  }
+  const routingContext = globalThis.__WEBFRAMEZ_ROUTING_CONTEXT__ ??=
+    new (require("node:async_hooks").AsyncLocalStorage)();
+  return routingContext.run(basename, async () => {
+    const previousBasename = globalThis.__RSC_BASENAME;
+    globalThis.__RSC_BASENAME = basename;
+    try {
+      return await renderHtml(model);
+    } finally {
+      globalThis.__RSC_BASENAME = previousBasename;
+    }
+  });
 }
 
 process.on("message", async (message) => {
@@ -1481,24 +1545,10 @@ ${stderrBuffer.trim()}` : "";
     }
   };
 }
+var routingRuntime = globalThis;
+var basenameContext = routingRuntime.__WEBFRAMEZ_ROUTING_CONTEXT__ ??= new import_node_async_hooks.AsyncLocalStorage();
 function withRequestBasename(basename, fn) {
-  const target = globalThis;
-  const previous = target.__RSC_BASENAME;
-  target.__RSC_BASENAME = basename;
-  const finish = () => {
-    target.__RSC_BASENAME = previous;
-  };
-  try {
-    const result = fn();
-    if (result && typeof result.then === "function") {
-      return result.finally(finish);
-    }
-    finish();
-    return result;
-  } catch (error) {
-    finish();
-    throw error;
-  }
+  return basenameContext.run(basename, fn);
 }
 function parseCookies(rawCookieHeader) {
   const raw = Array.isArray(rawCookieHeader) ? rawCookieHeader.join("; ") : rawCookieHeader ?? "";
@@ -1533,12 +1583,27 @@ function normalizeClientManifest(manifest, options) {
     }
   };
   for (const [key, value] of Object.entries(manifest)) {
+    const hashIndex = key.indexOf("#");
+    const moduleKey = hashIndex < 0 ? key : key.slice(0, hashIndex);
+    const exportSuffix = hashIndex < 0 ? "" : key.slice(hashIndex);
+    if (!import_node_path3.default.isAbsolute(moduleKey) && !moduleKey.includes(":") && !moduleKey.startsWith("file://")) {
+      const runtimePath = import_node_path3.default.resolve(options.cwd, moduleKey);
+      const allowedRoots = [options.distRootDir, ...candidateNodeModulesDirs];
+      const insideArtifact = allowedRoots.some((root) => {
+        const relative = import_node_path3.default.relative(import_node_path3.default.resolve(root), runtimePath);
+        return relative !== "" && relative !== ".." && !relative.startsWith(`..${import_node_path3.default.sep}`) && !import_node_path3.default.isAbsolute(relative);
+      });
+      if (insideArtifact) {
+        addAlias(`${runtimePath}${exportSuffix}`, value);
+        addAlias(`${(0, import_node_url.pathToFileURL)(runtimePath).href}${exportSuffix}`, value);
+      }
+    }
     if (!key.startsWith("file://")) {
       continue;
     }
     let absolutePath = "";
     try {
-      absolutePath = (0, import_node_url.fileURLToPath)(key);
+      absolutePath = (0, import_node_url.fileURLToPath)(moduleKey);
     } catch {
       continue;
     }
@@ -1549,13 +1614,13 @@ function normalizeClientManifest(manifest, options) {
     }
     const relativeModulePath = absolutePath.slice(markerIndex + marker.length);
     const relativeModulePathPosix = relativeModulePath.split(import_node_path3.default.sep).join("/");
-    addAlias(`./node_modules/${relativeModulePathPosix}`, value);
-    addAlias(`node_modules/${relativeModulePathPosix}`, value);
-    addAlias(absolutePath, value);
+    addAlias(`./node_modules/${relativeModulePathPosix}${exportSuffix}`, value);
+    addAlias(`node_modules/${relativeModulePathPosix}${exportSuffix}`, value);
+    addAlias(`${absolutePath}${exportSuffix}`, value);
     for (const nodeModulesDir of candidateNodeModulesDirs) {
       const aliasPath = import_node_path3.default.join(nodeModulesDir, relativeModulePath);
-      addAlias(aliasPath, value);
-      addAlias((0, import_node_url.pathToFileURL)(aliasPath).href, value);
+      addAlias(`${aliasPath}${exportSuffix}`, value);
+      addAlias(`${(0, import_node_url.pathToFileURL)(aliasPath).href}${exportSuffix}`, value);
     }
   }
   return normalized;
@@ -1700,10 +1765,10 @@ function createNodeRequestHandler(options) {
   const manifestPath = import_node_path3.default.resolve(
     options.manifestPath ?? import_node_path3.default.join(distRootDir, "react-client-manifest.json")
   );
-  const assetsPrefix = options.assetsPrefix ?? "/assets/";
-  const rscPath = options.rscPath ?? "/rsc";
-  const clientScriptUrl = options.clientScriptUrl ?? "/assets/client.js";
   const basePath = normalizeBasePath(options.basePath);
+  const assetsPrefix = options.assetsPrefix ?? `${basePath}/assets/`;
+  const rscPath = options.rscPath ?? `${basePath}/rsc`;
+  const clientScriptUrl = options.clientScriptUrl ?? `${basePath}/assets/client.js`;
   const nodeEnv = process.env.NODE_ENV || "";
   const runningInWatchMode = Array.isArray(process.execArgv) && process.execArgv.includes("--watch");
   const liveReloadEnabled = options.liveReloadPath !== false && (nodeEnv === "development" || runningInWatchMode);
@@ -1722,7 +1787,7 @@ function createNodeRequestHandler(options) {
   process.once("exit", disposeInitialHtmlWorker);
   process.once("SIGINT", disposeInitialHtmlWorker);
   process.once("SIGTERM", disposeInitialHtmlWorker);
-  return async function handleRequest(req, res) {
+  const handleRequest = async (req, res) => {
     if (!req.url) {
       res.statusCode = 400;
       res.end("Bad request");
@@ -1786,6 +1851,7 @@ function createNodeRequestHandler(options) {
           request: requestContext
         })
       );
+      resolved2.head = { ...resolved2.head, basename: resolved2.head.basename ?? basePath };
       attachResolvedContextToCoreRequest(req, resolved2.context);
       const payload = {
         model: resolved2.model,
@@ -1861,6 +1927,7 @@ function createNodeRequestHandler(options) {
         )
       })
     );
+    resolved.head = { ...resolved.head, basename: resolved.head.basename ?? basePath };
     attachResolvedContextToCoreRequest(req, resolved.context);
     const initialPayload = {
       model: resolved.model,
@@ -1946,7 +2013,30 @@ function createNodeRequestHandler(options) {
       }
     );
   };
+  return (req, res) => withRequestBasename(basePath, () => handleRequest(req, res));
 }
+var standaloneHtmlWorker;
+async function renderReactToHtml(element) {
+  if (!standaloneHtmlWorker) {
+    standaloneHtmlWorker = createInitialHtmlWorker(process.cwd());
+    process.once("exit", disposeReactHtmlRenderer);
+  }
+  const flightData = await renderRSCToString({ model: element }, {
+    moduleMap: {},
+    onError: (error) => {
+      console.error("[webframez-react] HTML render failed", error);
+    }
+  });
+  return standaloneHtmlWorker.renderFromFlightData({ flightData, moduleMap: {} });
+}
+function disposeReactHtmlRenderer() {
+  process.removeListener("exit", disposeReactHtmlRenderer);
+  standaloneHtmlWorker?.dispose();
+  standaloneHtmlWorker = void 0;
+}
+
+// src/paths.ts
+var import_routing = __toESM(require_routing2(), 1);
 
 // src/webframez-core.ts
 var import_node_path4 = __toESM(require("node:path"), 1);
@@ -2033,6 +2123,17 @@ function buildRenderDefaults(routePathValue) {
     assetsPrefix: `${mountPath}/assets/`,
     rscPath: `${mountPath}/rsc`,
     clientScriptUrl: `${mountPath}/assets/client.js`
+  };
+}
+function runtimeRoutePaths(routePath, options, basename = (0, import_routing.getBasename)(), groupPrefix = "") {
+  const localMount = normalizeMountPath(options.basePath ?? `${groupPrefix}${normalizeMountPath(routePath)}`);
+  const basePath = normalizeMountPath((0, import_routing.appPath)(localMount, basename)).replace(/\/$/, "");
+  return {
+    basePath,
+    assetsPrefix: options.assetsPrefix !== void 0 ? (0, import_routing.appPath)(options.assetsPrefix, basename) : `${basePath}/assets/`,
+    rscPath: options.rscPath !== void 0 ? (0, import_routing.appPath)(options.rscPath, basename) : `${basePath}/rsc`,
+    clientScriptUrl: options.clientScriptUrl !== void 0 ? (0, import_routing.appPath)(options.clientScriptUrl, basename) : `${basePath}/assets/client.js`,
+    ...typeof options.liveReloadPath === "string" ? { liveReloadPath: (0, import_routing.appPath)(options.liveReloadPath, basename) } : {}
   };
 }
 async function waitForResponseFinish(res) {
@@ -2128,10 +2229,7 @@ function registerRouteRenderer(route, methodName) {
         distRootDir: resolvedTarget.distRootDir,
         pagesDir: resolvedTarget.pagesDir,
         manifestPath: resolvedTarget.manifestPath,
-        basePath: basePath ?? defaults.basePath,
-        assetsPrefix: assetsPrefix ?? defaults.assetsPrefix,
-        rscPath: rscPath ?? defaults.rscPath,
-        clientScriptUrl: clientScriptUrl ?? defaults.clientScriptUrl
+        ...runtimeRoutePaths(routePathValue, options, route.basename ?? (0, import_routing.getBasename)(), route.tempGroupPrefix ?? "")
       });
       const methods = normalizeMethods(method);
       for (const currentMethod of methods) {
@@ -2173,13 +2271,10 @@ function resolveWebframezReactRouteOptions(routePathValue, options = {}) {
     distRootDir,
     pagesDir,
     manifestPath,
-    assetsPrefix: options.assetsPrefix ?? defaults.assetsPrefix,
-    rscPath: options.rscPath ?? defaults.rscPath,
-    clientScriptUrl: options.clientScriptUrl ?? defaults.clientScriptUrl,
+    ...runtimeRoutePaths(routePathValue, options),
     clientEntryPath: options.clientEntryPath ? resolveFromProjectRoot(options.clientEntryPath) : void 0,
     styleSrcPath: options.styleSrcPath ? resolveFromProjectRoot(options.styleSrcPath) : defaults.styleSrcPath,
-    basePath: options.basePath ?? defaults.basePath,
-    liveReloadPath: options.liveReloadPath,
+    liveReloadPath: typeof options.liveReloadPath === "string" ? (0, import_routing.appPath)(options.liveReloadPath) : options.liveReloadPath,
     onData: options.onData
   };
 }
@@ -2212,10 +2307,12 @@ var setupWebframezCoreReactRoute = initWebframezReact;
   createHTMLShell,
   createNodeRequestHandler,
   createRSCHandler,
+  disposeReactHtmlRenderer,
   getRegisteredReactBuildTargets,
   initWebframezReact,
   parseSearchParams,
   renderHeadToString,
+  renderReactToHtml,
   resolveWebframezReactRouteOptions,
   sendRSC,
   setupWebframezCoreReactRoute

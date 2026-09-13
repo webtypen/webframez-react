@@ -2,23 +2,23 @@
   "name": "webframez-react-dev",
   "private": true,
   "scripts": {
-    "build:framework": "npm --prefix .. run build",
-    "build:core": "npm --prefix ../../webframez-core run build",
+    "build:framework": "pnpm --dir .. run build",
+    "build:core": "pnpm --dir ../../webframez-core run build",
     "clean": "rm -rf dist",
     "build:client": "node ../bin/webframez-react.mjs build:client",
     "build:server": "node ../bin/webframez-react.mjs build:server",
-    "build": "npm run build:core && npm run build:framework && npm run clean && npm run build:server && npm run build:client",
-    "watch:core": "npm --prefix ../../webframez-core run build -- --watch --preserveWatchOutput",
-    "watch:framework": "npm --prefix .. run build:watch",
+    "build": "pnpm run build:core && pnpm run build:framework && pnpm run clean && pnpm run build:server && pnpm run build:client",
+    "watch:core": "pnpm --dir ../../webframez-core run build --watch --preserveWatchOutput",
+    "watch:framework": "pnpm --dir .. run build:watch",
     "watch:server": "node ../bin/webframez-react.mjs watch:server",
     "watch:client": "node ../bin/webframez-react.mjs watch:client",
     "serve:watch": "node --watch --conditions react-server start-server.cjs",
-    "dev:watch": "sh -c 'npm run watch:core & npm run watch:framework & npm run watch:server & npm run watch:client & npm run serve:watch & wait'",
-    "dev": "npm run build && npm run dev:watch"
+    "dev:watch": "sh -c 'pnpm run watch:core & pnpm run watch:framework & pnpm run watch:server & pnpm run watch:client & pnpm run serve:watch & wait'",
+    "dev": "pnpm run build && pnpm run dev:watch"
   },
   "dependencies": {
-    "@webtypen/webframez-core": "file:../../webframez-core",
-    "@webtypen/webframez-react": "file:..",
+    "@webtypen/webframez-core": "^0.3.65",
+    "@webtypen/webframez-react": "^0.0.49",
     "react": "0.0.0-experimental-95ffd6cd-20260205",
     "react-dom": "0.0.0-experimental-95ffd6cd-20260205",
     "react-server-dom-webpack": "0.0.0-experimental-95ffd6cd-20260205"

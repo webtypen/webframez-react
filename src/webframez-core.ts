@@ -1,3 +1,4 @@
+import { appPath, getBasename } from "./paths";
 import type { CreateNodeHandlerOptions } from "./http"; // @ts-ignore
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -142,6 +143,23 @@ function buildRenderDefaults(routePathValue: string) {
   };
 }
 
+function runtimeRoutePaths(
+  routePath: string,
+  options: WebframezCoreReactRenderRouteOptions,
+  basename = getBasename(),
+  groupPrefix = "",
+) {
+  const localMount = normalizeMountPath(options.basePath ?? `${groupPrefix}${normalizeMountPath(routePath)}`);
+  const basePath = normalizeMountPath(appPath(localMount, basename)).replace(/\/$/, "");
+  return {
+    basePath,
+    assetsPrefix: options.assetsPrefix !== undefined ? appPath(options.assetsPrefix, basename) : `${basePath}/assets/`,
+    rscPath: options.rscPath !== undefined ? appPath(options.rscPath, basename) : `${basePath}/rsc`,
+    clientScriptUrl: options.clientScriptUrl !== undefined ? appPath(options.clientScriptUrl, basename) : `${basePath}/assets/client.js`,
+    ...(typeof options.liveReloadPath === "string" ? { liveReloadPath: appPath(options.liveReloadPath, basename) } : {}),
+  };
+}
+
 async function waitForResponseFinish(res: ServerResponse) {
   if (res.writableEnded || res.destroyed) {
     return;
@@ -173,6 +191,8 @@ async function waitForResponseFinish(res: ServerResponse) {
 }
 
 type CoreRouteFacade = {
+  readonly basename?: string;
+  tempGroupPrefix?: string | null;
   extend: (
     name: string,
     factory: (route: CoreRouteFacade) => (...args: any[]) => any,
@@ -305,10 +325,7 @@ function registerRouteRenderer(
         distRootDir: resolvedTarget.distRootDir,
         pagesDir: resolvedTarget.pagesDir,
         manifestPath: resolvedTarget.manifestPath,
-        basePath: basePath ?? defaults.basePath,
-        assetsPrefix: assetsPrefix ?? defaults.assetsPrefix,
-        rscPath: rscPath ?? defaults.rscPath,
-        clientScriptUrl: clientScriptUrl ?? defaults.clientScriptUrl,
+        ...runtimeRoutePaths(routePathValue, options, route.basename ?? getBasename(), route.tempGroupPrefix ?? ""),
       });
 
       const methods = normalizeMethods(method);
@@ -359,17 +376,14 @@ export function resolveWebframezReactRouteOptions(
     distRootDir,
     pagesDir,
     manifestPath,
-    assetsPrefix: options.assetsPrefix ?? defaults.assetsPrefix,
-    rscPath: options.rscPath ?? defaults.rscPath,
-    clientScriptUrl: options.clientScriptUrl ?? defaults.clientScriptUrl,
+    ...runtimeRoutePaths(routePathValue, options),
     clientEntryPath: options.clientEntryPath
       ? resolveFromProjectRoot(options.clientEntryPath)
       : undefined,
     styleSrcPath: options.styleSrcPath
       ? resolveFromProjectRoot(options.styleSrcPath)
       : defaults.styleSrcPath,
-    basePath: options.basePath ?? defaults.basePath,
-    liveReloadPath: options.liveReloadPath,
+    liveReloadPath: typeof options.liveReloadPath === "string" ? appPath(options.liveReloadPath) : options.liveReloadPath,
     onData: options.onData,
   };
 }

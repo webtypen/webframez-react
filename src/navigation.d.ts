@@ -5,7 +5,7 @@ export type LinkProps = Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "hre
   basename?: string;
 };
 
-export function Link(props: LinkProps): React.ReactElement;
+export const Link: React.ForwardRefExoticComponent<LinkProps & React.RefAttributes<HTMLAnchorElement>>;
 
 export type RedirectProps = {
   to: string;
