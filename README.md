@@ -13,8 +13,12 @@ React Server Components (RSC) extension for `@webtypen/webframez-core`.
 ## Requirements
 
 - Node.js `>= 20`
-- `@webtypen/webframez-core`
+- `@webtypen/webframez-core` `>=0.3.69` (optional peer; required for Core integration)
 - React 19.x with matching `react-dom` and `react-server-dom-webpack`
+
+The Core peer has no upper version bound, so newer releases do not require a
+metadata update here. Development and tests use Core `0.3.69`; future Core API
+changes still need compatibility testing.
 
 ## Installation
 
