@@ -1,3 +1,4 @@
+import type { ModelAuth, Request } from "@webtypen/webframez-core";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RouteDataHook } from "./types";
 
@@ -22,6 +23,7 @@ export interface CreateNodeHandlerOptions
   extends CreateNodeHandlerPathsOptions,
     CreateNodeHandlerRoutingOptions {
   onData?: RouteDataHook;
+  auth?: ModelAuth | (() => ModelAuth);
 }
 
 export function createNodeRequestHandler(

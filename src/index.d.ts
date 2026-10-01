@@ -1,3 +1,5 @@
+import type { AuthContext, Model } from "@webtypen/webframez-core";
+import type { RouteRequestContext } from "./types";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CreateHtmlShellOptions, SendRSCOptions } from "./types";
 import type { CreateNodeHandlerOptions } from "./http";
@@ -27,3 +29,5 @@ export function createNodeRequestHandler(
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void>;
 
 export { renderReactToHtml, disposeReactHtmlRenderer } from "./http";
+
+export declare function getAuth<TUser extends Model = Model>(context: { request: RouteRequestContext }): AuthContext<TUser> | null;

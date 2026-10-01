@@ -1,3 +1,4 @@
+import type { AuthContext, Request } from "@webtypen/webframez-core";
 import type React from "react";
 
 export type RouteParams = Record<string, string | string[]>;
@@ -5,6 +6,9 @@ export type RouteSearchParams = Record<string, string | string[]>;
 export type RouteRequestHeaders = Record<string, string | string[] | undefined>;
 
 export type RouteRequestContext = {
+  /** Server-only values, omitted from client payloads. */
+  auth?: AuthContext | null;
+  req?: Request;
   host: string | null;
   pathname: string;
   originalPathname: string;

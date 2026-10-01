@@ -793,3 +793,6 @@ export function mountWebframezClient(options: ClientOptions = {}) {
   const App = createApp(initialResponse, rscEndpoint);
   return hydrateRoot(rootEl, <App />);
 }
+
+export { useAuth } from "@webtypen/webframez-react/auth";
+export type { ClientAuth } from "@webtypen/webframez-react/auth";

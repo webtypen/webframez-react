@@ -6,3 +6,4 @@ export type { CreateNodeHandlerOptions } from "./http";
 export type * from "./types";
 
 export { renderReactToHtml, disposeReactHtmlRenderer } from "./http";
+export { getAuth } from "./auth-server";

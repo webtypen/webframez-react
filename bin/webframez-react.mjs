@@ -323,15 +323,26 @@ async function loadRouteBuildTargets(routesPath, outDir, runtimeOutDir) {
       this[name] = factory(this);
       return this;
     },
+
     group(_options, callback) {
       if (typeof callback === "function") {
         callback();
       }
     },
+
     get() {},
+
     post() {},
+
     put() {},
+
+    patch() {},
+
     delete() {},
+
+    auth() {},
+
+    databuilder() {},
   };
 
   process.env.WEBFRAMEZ_REACT_OUT_DIR = runtimeOutDir;
@@ -364,6 +375,7 @@ async function loadRouteBuildTargets(routesPath, outDir, runtimeOutDir) {
       request === "webframez-core/dist/Router/Route"
     ) {
       return {
+        ...originalLoad.call(this, request, parent, isMain),
         Route: fakeRoute,
       };
     }

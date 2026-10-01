@@ -14,6 +14,8 @@ const sharedNode = {
     "src/webframez-core.ts",
     "src/navigation.tsx",
     "src/route-slot.tsx",
+    "src/auth.tsx",
+    "src/auth-server.ts",
     "src/build-plugin.ts",
   ],
   bundle: true,
@@ -39,6 +41,7 @@ const sharedNode = {
     "react-server-dom-webpack/client.node",
     "node:*",
     "@webtypen/webframez-react/route-slot",
+    "@webtypen/webframez-react/auth",
   ],
 };
 
@@ -57,6 +60,7 @@ const sharedClient = {
     "react-dom",
     "react-server-dom-webpack/client",
     "@webtypen/webframez-react/route-slot",
+    "@webtypen/webframez-react/auth",
   ],
 };
 
@@ -66,6 +70,8 @@ async function copyTypes() {
   await copyFile("src/paths.d.ts", "dist/paths.d.ts");
   await copyFile("src/router.d.ts", "dist/router.d.ts");
   await copyFile("src/types.d.ts", "dist/types.d.ts");
+  await copyFile("src/auth-server.d.ts", "dist/auth-server.d.ts");
+  await copyFile("src/auth.d.ts", "dist/auth.d.ts");
   await copyFile("src/client.d.ts", "dist/client.d.ts");
   await copyFile("src/navigation.d.ts", "dist/navigation.d.ts");
   await copyFile("src/route-slot.d.ts", "dist/route-slot.d.ts");

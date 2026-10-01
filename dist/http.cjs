@@ -34,6 +34,8 @@ __export(http_exports, {
   renderReactToHtml: () => renderReactToHtml
 });
 module.exports = __toCommonJS(http_exports);
+var import_react2 = __toESM(require("react"), 1);
+var import_auth = require("@webtypen/webframez-react/auth");
 var import_node_async_hooks = require("node:async_hooks");
 var import_node_fs2 = __toESM(require("node:fs"), 1);
 var import_node_path3 = __toESM(require("node:path"), 1);
@@ -1291,13 +1293,33 @@ function getRequestHost(req) {
   }
   return null;
 }
-function createRouteRequestContext(req, pathname, originalPathname) {
-  return {
+async function createRouteRequestContext(req, pathname, originalPathname, authResolver) {
+  const context = {
     host: getRequestHost(req),
     pathname,
     originalPathname,
     headers: req.headers
   };
+  const coreRequest = req.__webframezCoreRequest;
+  let request = coreRequest;
+  if (!request && authResolver) {
+    const { Request } = await import("@webtypen/webframez-core");
+    request = Object.assign(new Request(), { method: req.method || "GET", headers: req.headers });
+  }
+  const auth = typeof authResolver === "function" ? authResolver() : authResolver;
+  if (auth && request)
+    await auth.resolve(request);
+  Object.defineProperties(context, {
+    req: { value: request, enumerable: false },
+    auth: { get: () => request?.auth ?? null, enumerable: false }
+  });
+  return context;
+}
+function wrapAuthModel(model, context, authResolver) {
+  if (!authResolver || model === void 0)
+    return model;
+  const auth = typeof authResolver === "function" ? authResolver() : authResolver;
+  return import_react2.default.createElement(import_auth.AuthProvider, { auth: auth.snapshot(context.request.auth) }, model);
 }
 function stripBasePath(pathname, basePath) {
   if (!basePath) {
@@ -1738,10 +1760,11 @@ function createNodeRequestHandler(options) {
     if (url.pathname === rscPath) {
       const manifestState2 = getManifestState();
       const pathname = stripBasePath(url.searchParams.get("path") || "/", basePath);
-      const requestContext = createRouteRequestContext(
+      const requestContext = await createRouteRequestContext(
         req,
         pathname,
-        url.searchParams.get("path") || "/"
+        url.searchParams.get("path") || "/",
+        options.auth
       );
       const search = new URLSearchParams(url.searchParams.get("search") || "");
       const resolved2 = await withRequestBasename(
@@ -1756,8 +1779,8 @@ function createNodeRequestHandler(options) {
       resolved2.head = { ...resolved2.head, basename: resolved2.head.basename ?? basePath };
       attachResolvedContextToCoreRequest(req, resolved2.context);
       const payload = {
-        model: resolved2.model,
-        contextModel: resolved2.contextModel,
+        model: wrapAuthModel(resolved2.model, resolved2.context, options.auth),
+        contextModel: wrapAuthModel(resolved2.contextModel, resolved2.context, options.auth),
         pageModel: resolved2.pageModel,
         head: resolved2.head
       };
@@ -1816,23 +1839,20 @@ function createNodeRequestHandler(options) {
       }
       return;
     }
+    const routeRequest = await createRouteRequestContext(req, stripBasePath(url.pathname, basePath), url.pathname, options.auth);
     const resolved = await withRequestBasename(
       basePath,
       () => router.resolve({
         pathname: stripBasePath(url.pathname, basePath),
         searchParams: parseSearchParams(url.searchParams),
         cookies: requestCookies,
-        request: createRouteRequestContext(
-          req,
-          stripBasePath(url.pathname, basePath),
-          url.pathname
-        )
+        request: routeRequest
       })
     );
     resolved.head = { ...resolved.head, basename: resolved.head.basename ?? basePath };
     attachResolvedContextToCoreRequest(req, resolved.context);
     const initialPayload = {
-      model: resolved.model,
+      model: wrapAuthModel(resolved.model, resolved.context, options.auth),
       head: resolved.head
     };
     const manifestState = getManifestState();

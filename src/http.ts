@@ -1,3 +1,6 @@
+import type { ModelAuth, Request } from "@webtypen/webframez-core";
+import React from "react";
+import { AuthProvider } from "@webtypen/webframez-react/auth";
 import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs";
 import path from "node:path";
@@ -40,6 +43,7 @@ export interface CreateNodeHandlerOptions
   extends CreateNodeHandlerPathsOptions,
     CreateNodeHandlerRoutingOptions {
   onData?: RouteDataHook;
+  auth?: ModelAuth | (() => ModelAuth);
 }
 
 type CoreRequestBridge = {
@@ -569,17 +573,37 @@ function getRequestHost(req: IncomingMessage) {
   return null;
 }
 
-function createRouteRequestContext(
+async function createRouteRequestContext(
   req: IncomingMessage,
   pathname: string,
   originalPathname: string,
-): RouteRequestContext {
-  return {
+  authResolver?: CreateNodeHandlerOptions["auth"],
+): Promise<RouteRequestContext> {
+  const context: RouteRequestContext = {
     host: getRequestHost(req),
     pathname,
     originalPathname,
     headers: req.headers,
   };
+  const coreRequest = (req as IncomingMessageWithCoreBridge).__webframezCoreRequest as Request | undefined;
+  let request = coreRequest;
+  if (!request && authResolver) {
+    const { Request } = await import("@webtypen/webframez-core");
+    request = Object.assign(new Request(), { method: req.method || "GET", headers: req.headers });
+  }
+  const auth = typeof authResolver === "function" ? authResolver() : authResolver;
+  if (auth && request) await auth.resolve(request);
+  Object.defineProperties(context, {
+    req: { value: request, enumerable: false },
+    auth: { get: () => request?.auth ?? null, enumerable: false },
+  });
+  return context;
+}
+
+function wrapAuthModel(model: React.ReactNode, context: RouteContext, authResolver?: CreateNodeHandlerOptions["auth"]): React.ReactNode {
+  if (!authResolver || model === undefined) return model;
+  const auth = typeof authResolver === "function" ? authResolver() : authResolver;
+  return React.createElement(AuthProvider, { auth: auth.snapshot(context.request.auth) }, model);
 }
 
 function stripBasePath(pathname: string, basePath: string) {
@@ -1186,10 +1210,11 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
     if (url.pathname === rscPath) {
       const manifestState = getManifestState();
       const pathname = stripBasePath(url.searchParams.get("path") || "/", basePath);
-      const requestContext = createRouteRequestContext(
+      const requestContext = await createRouteRequestContext(
         req,
         pathname,
         url.searchParams.get("path") || "/",
+        options.auth,
       );
       const search = new URLSearchParams(url.searchParams.get("search") || "");
       const resolved = await withRequestBasename(basePath, () =>
@@ -1204,8 +1229,8 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       attachResolvedContextToCoreRequest(req, resolved.context);
 
       const payload: ClientNavigationPayload = {
-        model: resolved.model,
-        contextModel: resolved.contextModel,
+        model: wrapAuthModel(resolved.model, resolved.context, options.auth),
+        contextModel: wrapAuthModel(resolved.contextModel, resolved.context, options.auth),
         pageModel: resolved.pageModel,
         head: resolved.head,
       };
@@ -1273,23 +1298,20 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       return;
     }
 
+    const routeRequest = await createRouteRequestContext(req, stripBasePath(url.pathname, basePath), url.pathname, options.auth);
     const resolved = await withRequestBasename(basePath, () =>
       router.resolve({
         pathname: stripBasePath(url.pathname, basePath),
         searchParams: parseSearchParams(url.searchParams),
         cookies: requestCookies,
-        request: createRouteRequestContext(
-          req,
-          stripBasePath(url.pathname, basePath),
-          url.pathname,
-        ),
+        request: routeRequest,
       })
     );
     resolved.head = { ...resolved.head, basename: resolved.head.basename ?? basePath };
     attachResolvedContextToCoreRequest(req, resolved.context);
 
     const initialPayload: ClientNavigationPayload = {
-      model: resolved.model,
+      model: wrapAuthModel(resolved.model, resolved.context, options.auth),
       head: resolved.head,
     };
     const manifestState = getManifestState();

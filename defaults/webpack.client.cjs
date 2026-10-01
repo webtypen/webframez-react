@@ -28,6 +28,7 @@ const mode =
 const frameworkCacheFiles = [
   path.join(frameworkDistDir, "client.js"),
   path.join(frameworkDistDir, "route-slot.js"),
+  path.join(frameworkDistDir, "auth.js"),
   path.join(frameworkDistDir, "navigation.js"),
 ].filter((filePath) => fs.existsSync(filePath));
 const frameworkCacheVersion = frameworkCacheFiles
@@ -170,7 +171,7 @@ class ClientManifestExportAliasesPlugin {
           !relativeToFrameworkDist.startsWith("..") &&
           !path.isAbsolute(relativeToFrameworkDist) &&
           /\.(js)$/.test(relativeToFrameworkDist) &&
-          /^(navigation|route-slot)\.js$/.test(relativeToFrameworkDist)
+          /^(navigation|route-slot|auth)\.js$/.test(relativeToFrameworkDist)
         ) {
           const cjsAbsolutePath = absolutePath.replace(/\.js$/, ".cjs");
           if (fs.existsSync(cjsAbsolutePath)) {
@@ -314,7 +315,7 @@ module.exports = {
         {
           directory: frameworkDistDir,
           recursive: false,
-          include: /(navigation|route-slot)\.js$/,
+          include: /(navigation|route-slot|auth)\.js$/,
         },
       ],
     }),

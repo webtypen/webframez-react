@@ -1,6 +1,6 @@
 {
   "name": "@webtypen/webframez-react",
-  "version": "0.0.51",
+  "version": "0.0.52",
   "description": "TypeScript React RSC addition for @webtypen/webframez-core",
   "homepage": "https://webtypen.de/",
   "author": {
@@ -79,13 +79,24 @@
       "types": "./dist/paths.d.ts",
       "import": "./dist/paths.js",
       "require": "./dist/paths.cjs"
+    },
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "import": "./dist/auth.js",
+      "require": "./dist/auth.cjs"
+    },
+    "./auth-server": {
+      "types": "./dist/auth-server.d.ts",
+      "import": "./dist/auth-server.js",
+      "require": "./dist/auth-server.cjs"
     }
   },
   "files": [
     "dist",
     "defaults",
     "bin",
-    "register.cjs"
+    "register.cjs",
+    "docs/authentication.md"
   ],
   "webframez": {
     "plugin": "./dist/build-plugin.cjs"
@@ -97,7 +108,7 @@
     "test": "node --test tests/*.test.cjs"
   },
   "peerDependencies": {
-    "@webtypen/webframez-core": ">=0.3.69",
+    "@webtypen/webframez-core": ">=0.3.73",
     "react": "^19.0.0 || >=0.0.0-0 <0.0.1",
     "react-dom": "^19.0.0 || >=0.0.0-0 <0.0.1",
     "react-server-dom-webpack": "^19.0.0 || >=0.0.0-0 <0.0.1"
@@ -108,7 +119,7 @@
     }
   },
   "devDependencies": {
-    "@webtypen/webframez-core": "0.3.69",
+    "@webtypen/webframez-core": "0.3.73",
     "esbuild": "^0.20.2",
     "react": "19.1.1",
     "react-dom": "19.1.1",
@@ -118,6 +129,12 @@
     "*": {
       "paths": [
         "dist/paths.d.ts"
+      ],
+      "auth": [
+        "dist/auth.d.ts"
+      ],
+      "auth-server": [
+        "dist/auth-server.d.ts"
       ]
     }
   }

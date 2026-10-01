@@ -31,3 +31,6 @@ export type CookieClient = {
 export function mountWebframezClient(options?: ClientOptions): Root;
 export function useRouter(): RouterClient;
 export function useCookie(): CookieClient;
+
+export { useAuth } from "@webtypen/webframez-react/auth";
+export type { ClientAuth } from "@webtypen/webframez-react/auth";
