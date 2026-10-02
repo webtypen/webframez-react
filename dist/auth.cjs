@@ -37,7 +37,8 @@ module.exports = __toCommonJS(auth_exports);
 var import_react = __toESM(require("react"), 1);
 var import_jsx_runtime = require("react/jsx-runtime");
 var anonymous = { user: null, session: null, isAuthenticated: false };
-var AuthContext = typeof import_react.default.createContext === "function" ? import_react.default.createContext(anonymous) : null;
+var authRuntime = globalThis;
+var AuthContext = typeof import_react.default.createContext === "function" ? authRuntime.__WEBFRAMEZ_AUTH_CONTEXT__ ||= import_react.default.createContext(anonymous) : null;
 function AuthProvider({ auth, children }) {
   const value = auth ? { ...auth, isAuthenticated: true } : anonymous;
   if (!AuthContext)

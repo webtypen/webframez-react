@@ -10,7 +10,11 @@ export type ClientAuth<TUser = Record<string, unknown>> = {
 };
 
 const anonymous: ClientAuth = { user: null, session: null, isAuthenticated: false };
-const AuthContext = typeof React.createContext === "function" ? React.createContext<ClientAuth>(anonymous) : null;
+// SSR may load ESM client references alongside CommonJS application modules.
+const authRuntime = globalThis as typeof globalThis & { __WEBFRAMEZ_AUTH_CONTEXT__?: React.Context<ClientAuth> };
+const AuthContext = typeof React.createContext === "function"
+  ? (authRuntime.__WEBFRAMEZ_AUTH_CONTEXT__ ||= React.createContext<ClientAuth>(anonymous))
+  : null;
 
 export function AuthProvider({ auth, children }: { auth: AuthSnapshot | null; children: React.ReactNode }) {
   const value = auth ? { ...auth, isAuthenticated: true } : anonymous;

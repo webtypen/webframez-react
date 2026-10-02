@@ -4,7 +4,8 @@
 import React from "react";
 import { Fragment, jsx } from "react/jsx-runtime";
 var anonymous = { user: null, session: null, isAuthenticated: false };
-var AuthContext = typeof React.createContext === "function" ? React.createContext(anonymous) : null;
+var authRuntime = globalThis;
+var AuthContext = typeof React.createContext === "function" ? authRuntime.__WEBFRAMEZ_AUTH_CONTEXT__ ||= React.createContext(anonymous) : null;
 function AuthProvider({ auth, children }) {
   const value = auth ? { ...auth, isAuthenticated: true } : anonymous;
   if (!AuthContext)

@@ -266,6 +266,8 @@ module.exports = {
     extensions: [".tsx", ".ts", ".js"],
     modules: [path.resolve(projectRoot, "node_modules"), "node_modules"],
     alias: {
+      // Share one auth context across CommonJS application modules and ESM client references.
+      "@webtypen/webframez-react/auth$": path.join(frameworkDistDir, "auth.js"),
       react: path.resolve(projectRoot, "node_modules", "react"),
       "react-dom": path.resolve(projectRoot, "node_modules", "react-dom"),
       "react/jsx-runtime": path.resolve(projectRoot, "node_modules", "react", "jsx-runtime.js"),
