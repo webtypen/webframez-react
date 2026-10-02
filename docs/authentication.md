@@ -79,7 +79,8 @@ renews only access; explicit POST refresh rotates access and refresh secrets.
 The handler publishes browser-safe endpoint and CSRF-cookie settings in the head.
 `mountWebframezClient()` automatically installs Core's CSRF/form/refresh adapter
 once when these settings are present. No Auth polling component is required.
-API auth failures trigger one shared refresh and one request retry; login and
+API auth failures trigger a refresh and one request retry. Web Locks serialize
+the complete refresh/retry cycle across tabs; login and
 permission failures are not retried. Named scopes and basenames use their registered
 endpoint and cookie names. Access and refresh cookies remain HttpOnly.
 
