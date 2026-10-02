@@ -1,3 +1,4 @@
+import { createAuthFetch, installAuthForms, type AuthClientOptions } from "@webtypen/webframez-core/auth-client";
 import React, { useEffect, useState } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { createFromFetch, createFromReadableStream } from "react-server-dom-webpack/client";
@@ -16,6 +17,7 @@ import type {
 type ClientOptions = {
   rootId?: string;
   rscEndpoint?: string;
+  auth?: AuthClientOptions | false;
 };
 
 export type RouterClient = {
@@ -777,6 +779,15 @@ export function mountWebframezClient(options: ClientOptions = {}) {
   const rootEl = document.getElementById(rootId);
   if (!rootEl) {
     throw new Error(`Missing #${rootId} element`);
+  }
+
+  const authMeta = document.querySelector<HTMLMetaElement>('meta[name="webframez-auth"]');
+  const runtime = window as Window & { __WEBFRAMEZ_AUTH_FETCH_INSTALLED__?: boolean };
+  if (options.auth !== false && authMeta && !runtime.__WEBFRAMEZ_AUTH_FETCH_INSTALLED__) {
+    const config: AuthClientOptions = { ...JSON.parse(authMeta.content), ...options.auth };
+    window.fetch = createAuthFetch(config, window.fetch.bind(window));
+    installAuthForms(config);
+    runtime.__WEBFRAMEZ_AUTH_FETCH_INSTALLED__ = true;
   }
 
   const endpointFromGlobal =

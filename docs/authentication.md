@@ -67,3 +67,22 @@ register `Auth.scope().middleware({ required: true })` in the Kernel. Then use
 middleware (`Auth.scope().middleware()`) leaves anonymous requests with `req.auth = null`.
 Mutation resolution always enforces CSRF. `resolveCookies(cookies)` exists for
 trusted server render integrations; it performs a read-only authentication.
+
+## Automatic cookie renewal and browser auth
+
+With `auth: "main"` (or another registered scope), the HTTP handler loads the real
+user model and resumes expired access cookies on GET/HEAD before rendering SSR or
+RSC. Resumption requires a current refresh secret and its matching session-bound
+CSRF cookie; expired, revoked or inactive sessions remain anonymous. Read resumption
+renews only access; explicit POST refresh rotates access and refresh secrets.
+
+The handler publishes browser-safe endpoint and CSRF-cookie settings in the head.
+`mountWebframezClient()` automatically installs Core's CSRF/form/refresh adapter
+once when these settings are present. No Auth polling component is required.
+API auth failures trigger one shared refresh and one request retry; login and
+permission failures are not retried. Named scopes and basenames use their registered
+endpoint and cookie names. Access and refresh cookies remain HttpOnly.
+
+Override browser routing with `mountWebframezClient({ auth: { loginPaths: [...] } })`,
+or disable installation explicitly with `auth: false`. Projects with custom fetch
+behavior should install their wrapper before mounting so it remains in the fetch chain.

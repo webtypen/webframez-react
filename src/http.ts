@@ -586,6 +586,7 @@ async function createRouteRequestContext(
   pathname: string,
   originalPathname: string,
   authResolver?: CreateNodeHandlerOptions["auth"],
+  response?: ServerResponse,
 ): Promise<RouteRequestContext> {
   const context: RouteRequestContext = {
     host: getRequestHost(req),
@@ -600,11 +601,15 @@ async function createRouteRequestContext(
     request = Object.assign(new Request(), { method: req.method || "GET", headers: req.headers });
   }
   const auth = await resolveAuthScope(authResolver);
-  if (auth && request) await auth.resolve(request);
+  if (auth && request) {
+    const { Response } = await import("@webtypen/webframez-core");
+    await auth.resolve(request, response ? new Response().setServerResponse(response) : undefined);
+  }
   Object.defineProperties(context, {
     req: { value: request, enumerable: false },
     auth: { get: () => request?.auth ?? null, enumerable: false },
   });
+  if (auth) Object.defineProperty(context, "authClient", { value: auth.browserConfiguration, enumerable: false });
   return context;
 }
 
@@ -1223,6 +1228,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         pathname,
         url.searchParams.get("path") || "/",
         options.auth,
+        res,
       );
       const search = new URLSearchParams(url.searchParams.get("search") || "");
       const resolved = await withRequestBasename(basePath, () =>
@@ -1234,6 +1240,8 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         })
       );
       resolved.head = { ...resolved.head, basename: resolved.head.basename ?? basePath };
+      const authClient = (requestContext as RouteRequestContext & { authClient?: object }).authClient;
+      if (authClient) resolved.head.meta = [...(resolved.head.meta || []), { name: "webframez-auth", content: JSON.stringify(authClient) }];
       attachResolvedContextToCoreRequest(req, resolved.context);
 
       const payload: ClientNavigationPayload = {
@@ -1306,7 +1314,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       return;
     }
 
-    const routeRequest = await createRouteRequestContext(req, stripBasePath(url.pathname, basePath), url.pathname, options.auth);
+    const routeRequest = await createRouteRequestContext(req, stripBasePath(url.pathname, basePath), url.pathname, options.auth, res);
     const resolved = await withRequestBasename(basePath, () =>
       router.resolve({
         pathname: stripBasePath(url.pathname, basePath),
@@ -1316,6 +1324,8 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       })
     );
     resolved.head = { ...resolved.head, basename: resolved.head.basename ?? basePath };
+    const authClient = (routeRequest as RouteRequestContext & { authClient?: object }).authClient;
+    if (authClient) resolved.head.meta = [...(resolved.head.meta || []), { name: "webframez-auth", content: JSON.stringify(authClient) }];
     attachResolvedContextToCoreRequest(req, resolved.context);
 
     const initialPayload: ClientNavigationPayload = {

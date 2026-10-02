@@ -1,8 +1,10 @@
+import type { AuthClientOptions } from "@webtypen/webframez-core/auth-client";
 import type { Root } from "react-dom/client";
 
 export type ClientOptions = {
   rootId?: string;
   rscEndpoint?: string;
+  auth?: AuthClientOptions | false;
 };
 
 export type RouterClient = {
