@@ -1,4 +1,4 @@
-import type { ModelAuth, Request } from "@webtypen/webframez-core";
+import type { AuthScope, Request } from "@webtypen/webframez-core";
 import React from "react";
 import { AuthProvider } from "@webtypen/webframez-react/auth";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -43,7 +43,7 @@ export interface CreateNodeHandlerOptions
   extends CreateNodeHandlerPathsOptions,
     CreateNodeHandlerRoutingOptions {
   onData?: RouteDataHook;
-  auth?: ModelAuth | (() => ModelAuth);
+  auth?: string | AuthScope | (() => AuthScope);
 }
 
 type CoreRequestBridge = {
@@ -573,6 +573,14 @@ function getRequestHost(req: IncomingMessage) {
   return null;
 }
 
+async function resolveAuthScope(resolver?: CreateNodeHandlerOptions["auth"]): Promise<AuthScope | undefined> {
+  if (typeof resolver === "string") {
+    const { Auth } = await import("@webtypen/webframez-core");
+    return Auth.scope(resolver);
+  }
+  return typeof resolver === "function" ? resolver() : resolver;
+}
+
 async function createRouteRequestContext(
   req: IncomingMessage,
   pathname: string,
@@ -591,7 +599,7 @@ async function createRouteRequestContext(
     const { Request } = await import("@webtypen/webframez-core");
     request = Object.assign(new Request(), { method: req.method || "GET", headers: req.headers });
   }
-  const auth = typeof authResolver === "function" ? authResolver() : authResolver;
+  const auth = await resolveAuthScope(authResolver);
   if (auth && request) await auth.resolve(request);
   Object.defineProperties(context, {
     req: { value: request, enumerable: false },
@@ -600,10 +608,10 @@ async function createRouteRequestContext(
   return context;
 }
 
-function wrapAuthModel(model: React.ReactNode, context: RouteContext, authResolver?: CreateNodeHandlerOptions["auth"]): React.ReactNode {
+async function wrapAuthModel(model: React.ReactNode, context: RouteContext, authResolver?: CreateNodeHandlerOptions["auth"]): Promise<React.ReactNode> {
   if (!authResolver || model === undefined) return model;
-  const auth = typeof authResolver === "function" ? authResolver() : authResolver;
-  return React.createElement(AuthProvider, { auth: auth.snapshot(context.request.auth) }, model);
+  const auth = await resolveAuthScope(authResolver);
+  return React.createElement(AuthProvider, { auth: auth!.snapshot(context.request.auth) }, model);
 }
 
 function stripBasePath(pathname: string, basePath: string) {
@@ -1229,8 +1237,8 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       attachResolvedContextToCoreRequest(req, resolved.context);
 
       const payload: ClientNavigationPayload = {
-        model: wrapAuthModel(resolved.model, resolved.context, options.auth),
-        contextModel: wrapAuthModel(resolved.contextModel, resolved.context, options.auth),
+        model: await wrapAuthModel(resolved.model, resolved.context, options.auth),
+        contextModel: await wrapAuthModel(resolved.contextModel, resolved.context, options.auth),
         pageModel: resolved.pageModel,
         head: resolved.head,
       };
@@ -1311,7 +1319,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
     attachResolvedContextToCoreRequest(req, resolved.context);
 
     const initialPayload: ClientNavigationPayload = {
-      model: wrapAuthModel(resolved.model, resolved.context, options.auth),
+      model: await wrapAuthModel(resolved.model, resolved.context, options.auth),
       head: resolved.head,
     };
     const manifestState = getManifestState();

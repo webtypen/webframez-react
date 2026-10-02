@@ -1,16 +1,18 @@
 # Authentication in React components
 
-Configure one model-backed Core auth instance for controllers and React routes:
+Configure named Core scopes through the application's auth configuration:
 
 ```ts
-import { ModelAuth, Route } from "@webtypen/webframez-core";
+import { Auth, Config, Route } from "@webtypen/webframez-core";
 
-const auth = new ModelAuth({ model: User, origin: "https://site.example" });
-Route.auth("/api/auth", { auth });
-ReactRoute.renderReact("/", { distRootDir: "dist", pagesDir: "dist/app/Website", auth });
+Config.register("auth", { scopes: { main: { model: User, origin: "https://site.example" } } });
+Route.auth("/api/auth", { auth: "main" });
+ReactRoute.renderReact("/", { distRootDir: "dist", pagesDir: "dist/app/Website", auth: "main" });
 ```
 
-A lazy factory (`auth: () => auth`) is supported for configuration loaded at boot.
+Both routes resolve the same `Auth.scope("main")` object. No application singleton
+or resolver factory is needed. Existing explicit scope objects and lazy factories
+remain supported by React for compatibility.
 Authentication is optional for public React pages. It runs before page data,
 React middleware, layouts and server components. Protected pages must redirect
 or abort when auth is null. Core always verifies expiry, revocation and account
@@ -50,7 +52,7 @@ export default function AccountLabel() {
 
 The React route inserts an AuthProvider automatically, including SSR. The hook
 receives a safe snapshot. Default public user fields are the primary key, email,
-name, firstname, lastname and roles; `ModelAuth.publicUserFields` configures the
+name, firstname, lastname and roles; `AuthScope` option `publicUserFields` configures the
 allowlist. The password field, internal Model metadata and `__hidden` fields are
 excluded even if requested. Only public session metadata is sent; token secrets
 and token hashes are never included. Snapshots refresh on navigation and router
@@ -59,9 +61,9 @@ UI state; authorization remains on the server. There is no background polling.
 For component tests or custom roots, `AuthProvider` and `useAuth` are also exported
 from `@webtypen/webframez-react/auth`.
 
-For controllers and Core middleware, load auth with `await auth.resolve(req)` or
-register `auth.middleware({ required: true })` in the Kernel. Then use
+For controllers and Core middleware, load auth with `await Auth.scope().resolve(req)` or
+register `Auth.scope().middleware({ required: true })` in the Kernel. Then use
 `req.auth.user` and `req.auth.session` after checking auth is present. An optional
-middleware (`auth.middleware()`) leaves anonymous requests with `req.auth = null`.
+middleware (`Auth.scope().middleware()`) leaves anonymous requests with `req.auth = null`.
 Mutation resolution always enforces CSRF. `resolveCookies(cookies)` exists for
 trusted server render integrations; it performs a read-only authentication.

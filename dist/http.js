@@ -1271,6 +1271,13 @@ function getRequestHost(req) {
   }
   return null;
 }
+async function resolveAuthScope(resolver) {
+  if (typeof resolver === "string") {
+    const { Auth } = await import("@webtypen/webframez-core");
+    return Auth.scope(resolver);
+  }
+  return typeof resolver === "function" ? resolver() : resolver;
+}
 async function createRouteRequestContext(req, pathname, originalPathname, authResolver) {
   const context = {
     host: getRequestHost(req),
@@ -1284,7 +1291,7 @@ async function createRouteRequestContext(req, pathname, originalPathname, authRe
     const { Request } = await import("@webtypen/webframez-core");
     request = Object.assign(new Request(), { method: req.method || "GET", headers: req.headers });
   }
-  const auth = typeof authResolver === "function" ? authResolver() : authResolver;
+  const auth = await resolveAuthScope(authResolver);
   if (auth && request)
     await auth.resolve(request);
   Object.defineProperties(context, {
@@ -1293,10 +1300,10 @@ async function createRouteRequestContext(req, pathname, originalPathname, authRe
   });
   return context;
 }
-function wrapAuthModel(model, context, authResolver) {
+async function wrapAuthModel(model, context, authResolver) {
   if (!authResolver || model === void 0)
     return model;
-  const auth = typeof authResolver === "function" ? authResolver() : authResolver;
+  const auth = await resolveAuthScope(authResolver);
   return React2.createElement(AuthProvider, { auth: auth.snapshot(context.request.auth) }, model);
 }
 function stripBasePath(pathname, basePath) {
@@ -1757,8 +1764,8 @@ function createNodeRequestHandler(options) {
       resolved2.head = { ...resolved2.head, basename: resolved2.head.basename ?? basePath };
       attachResolvedContextToCoreRequest(req, resolved2.context);
       const payload = {
-        model: wrapAuthModel(resolved2.model, resolved2.context, options.auth),
-        contextModel: wrapAuthModel(resolved2.contextModel, resolved2.context, options.auth),
+        model: await wrapAuthModel(resolved2.model, resolved2.context, options.auth),
+        contextModel: await wrapAuthModel(resolved2.contextModel, resolved2.context, options.auth),
         pageModel: resolved2.pageModel,
         head: resolved2.head
       };
@@ -1830,7 +1837,7 @@ function createNodeRequestHandler(options) {
     resolved.head = { ...resolved.head, basename: resolved.head.basename ?? basePath };
     attachResolvedContextToCoreRequest(req, resolved.context);
     const initialPayload = {
-      model: wrapAuthModel(resolved.model, resolved.context, options.auth),
+      model: await wrapAuthModel(resolved.model, resolved.context, options.auth),
       head: resolved.head
     };
     const manifestState = getManifestState();

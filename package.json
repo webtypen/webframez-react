@@ -1,6 +1,6 @@
 {
   "name": "@webtypen/webframez-react",
-  "version": "0.0.53",
+  "version": "0.0.54",
   "description": "TypeScript React RSC addition for @webtypen/webframez-core",
   "homepage": "https://webtypen.de/",
   "author": {
@@ -108,7 +108,7 @@
     "test": "node --test tests/*.test.cjs"
   },
   "peerDependencies": {
-    "@webtypen/webframez-core": ">=0.3.73",
+    "@webtypen/webframez-core": ">=0.3.74",
     "react": "^19.0.0 || >=0.0.0-0 <0.0.1",
     "react-dom": "^19.0.0 || >=0.0.0-0 <0.0.1",
     "react-server-dom-webpack": "^19.0.0 || >=0.0.0-0 <0.0.1"
@@ -119,7 +119,7 @@
     }
   },
   "devDependencies": {
-    "@webtypen/webframez-core": "0.3.73",
+    "@webtypen/webframez-core": "0.3.74",
     "esbuild": "^0.20.2",
     "react": "19.1.1",
     "react-dom": "19.1.1",
