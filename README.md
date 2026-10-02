@@ -572,3 +572,21 @@ and `Vary: Accept-Encoding` remain in place.
 
 These changes do not cache authenticated HTML or RSC responses. Worker count,
 initial rendering and application caching retain their existing behavior.
+
+
+### Shared client chunks and build-time compression
+
+The default client build extracts shared asynchronous dependencies into reusable
+chunks. The Flight manifest includes every dependency of a client reference; the
+initial `client.js` bootstrap remains self-contained. Deploy the complete
+`dist/chunks` directory together with the matching manifests and bootstrap.
+
+Production client builds emit Brotli (`.br`, quality 6) and Gzip (`.gz`) sidecars
+for emitted JavaScript/CSS assets of at least 1 KiB. The HTTP handler serves fresh
+sidecars directly. Dynamic HTML and assets without a fresh sidecar use Brotli
+quality 4 so requests never pay for Brotli's default maximum compression level.
+CSS produced separately from Webpack uses this streaming fallback unless the
+consumer build also provides sidecars. Development builds do not emit sidecars.
+
+`tests/shared-chunks.test.cjs` builds real Flight references, loads their emitted
+chunks and checks shared module state, deduplicated downloads and decompression.

@@ -1074,7 +1074,7 @@ function getPreferredContentEncoding(req, ext, fileSize) {
 async function sendTextResponse(req, res, body, options) {
   const bodyBuffer = Buffer.from(body);
   const contentEncoding = options.compress === false ? "" : getPreferredContentEncoding(req, ".html", bodyBuffer.length);
-  const output = contentEncoding === "br" ? await compressBrotli(bodyBuffer) : contentEncoding === "gzip" ? await compressGzip(bodyBuffer) : bodyBuffer;
+  const output = contentEncoding === "br" ? await compressBrotli(bodyBuffer, { params: { [import_node_zlib.constants.BROTLI_PARAM_QUALITY]: 4 } }) : contentEncoding === "gzip" ? await compressGzip(bodyBuffer) : bodyBuffer;
   if (res.destroyed)
     return;
   res.statusCode = options.statusCode ?? 200;
@@ -1964,7 +1964,7 @@ function createNodeRequestHandler(options) {
         stream.pipe(res);
       } else if (contentEncoding === "br") {
         res.setHeader("Content-Encoding", "br");
-        stream.pipe((0, import_node_zlib.createBrotliCompress)()).pipe(res);
+        stream.pipe((0, import_node_zlib.createBrotliCompress)({ params: { [import_node_zlib.constants.BROTLI_PARAM_QUALITY]: 4 } })).pipe(res);
       } else if (contentEncoding === "gzip") {
         res.setHeader("Content-Encoding", "gzip");
         stream.pipe((0, import_node_zlib.createGzip)()).pipe(res);

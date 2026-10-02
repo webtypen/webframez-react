@@ -16,7 +16,7 @@ const start = source.indexOf("function isCompressibleAsset(");
 const end = source.indexOf("\ntype InitialHtmlFlightPayload", start);
 const helpers = vm.runInNewContext(transformSync(source.slice(start, end), { loader: "ts" }).code +
     "\n({ sendTextResponse, getPreferredContentEncoding })", {
-    path, Buffer,
+    path, Buffer, zlibConstants: zlib.constants,
     compressBrotli: promisify(zlib.brotliCompress),
     compressGzip: promisify(zlib.gzip),
 });
@@ -57,6 +57,11 @@ test("HTML compression yields the event loop and preserves body, status, cookies
             assert.equal(result.headers["content-encoding"] || "", selected);
             const decoded = selected === "br" ? zlib.brotliDecompressSync(result.body) : selected === "gzip" ? zlib.gunzipSync(result.body) : result.body;
             assert.equal(decoded.toString(), body);
+            if (selected === "br") {
+                assert.deepEqual(result.body, zlib.brotliCompressSync(Buffer.from(body), {
+                    params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 },
+                }));
+            }
             assert.equal(result.headers["cache-control"], "no-store");
             assert.equal(result.headers.vary, "Accept-Encoding");
             assert.deepEqual(result.headers["set-cookie"], ["access=token; HttpOnly; SameSite=Lax"]);
@@ -105,6 +110,9 @@ test("production assets use fresh sidecars and fall back for missing or stale co
         fs.unlinkSync(file + ".br");
         let result = await getRaw(port, "/assets/" + filename, "br");
         assert.deepEqual(zlib.brotliDecompressSync(result.body), body);
+        assert.deepEqual(result.body, zlib.brotliCompressSync(body, {
+            params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 },
+        }));
         fs.utimesSync(file + ".gz", new Date(0), new Date(0));
         result = await getRaw(port, "/assets/" + filename, "gzip");
         assert.deepEqual(zlib.gunzipSync(result.body), body);

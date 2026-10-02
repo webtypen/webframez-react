@@ -949,6 +949,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import {
   brotliCompress,
+  constants as zlibConstants,
   createBrotliCompress,
   createGzip,
   gzip
@@ -1059,7 +1060,7 @@ function getPreferredContentEncoding(req, ext, fileSize) {
 async function sendTextResponse(req, res, body, options) {
   const bodyBuffer = Buffer.from(body);
   const contentEncoding = options.compress === false ? "" : getPreferredContentEncoding(req, ".html", bodyBuffer.length);
-  const output = contentEncoding === "br" ? await compressBrotli(bodyBuffer) : contentEncoding === "gzip" ? await compressGzip(bodyBuffer) : bodyBuffer;
+  const output = contentEncoding === "br" ? await compressBrotli(bodyBuffer, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 4 } }) : contentEncoding === "gzip" ? await compressGzip(bodyBuffer) : bodyBuffer;
   if (res.destroyed)
     return;
   res.statusCode = options.statusCode ?? 200;
@@ -1949,7 +1950,7 @@ function createNodeRequestHandler(options) {
         stream.pipe(res);
       } else if (contentEncoding === "br") {
         res.setHeader("Content-Encoding", "br");
-        stream.pipe(createBrotliCompress()).pipe(res);
+        stream.pipe(createBrotliCompress({ params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 4 } })).pipe(res);
       } else if (contentEncoding === "gzip") {
         res.setHeader("Content-Encoding", "gzip");
         stream.pipe(createGzip()).pipe(res);

@@ -1,4 +1,6 @@
 const fs = require("fs");
+const { promisify } = require("node:util");
+const { brotliCompress, gzip, constants } = require("node:zlib");
 const path = require("path");
 const { createRequire } = require("node:module");
 const { fileURLToPath, pathToFileURL } = require("url");
@@ -244,6 +246,33 @@ class ClientManifestExportAliasesPlugin {
   }
 }
 
+// Compress immutable browser assets once at build time, never at request time.
+class PrecompressedClientAssetsPlugin {
+  apply(compiler) {
+    compiler.hooks.thisCompilation.tap("PrecompressedClientAssetsPlugin", (compilation) => {
+      compilation.hooks.processAssets.tapPromise({
+        name: "PrecompressedClientAssetsPlugin",
+        stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_TRANSFER,
+      }, async () => {
+        const assets = compilation.getAssets().filter(({ name, source }) => /\.(js|css)$/.test(name) && source.size() >= 1024);
+        let next = 0;
+        await Promise.all(Array.from({ length: Math.min(4, assets.length) }, async () => {
+          while (next < assets.length) {
+            const { name, source } = assets[next++];
+            const body = Buffer.from(source.source());
+            const [br, gz] = await Promise.all([
+              promisify(brotliCompress)(body, { params: { [constants.BROTLI_PARAM_QUALITY]: 6 } }),
+              promisify(gzip)(body, { level: 9 }),
+            ]);
+            compilation.emitAsset(name + ".br", new compiler.webpack.sources.RawSource(br));
+            compilation.emitAsset(name + ".gz", new compiler.webpack.sources.RawSource(gz));
+          }
+        }));
+      });
+    });
+  }
+}
+
 module.exports = {
   mode,
   cache: {
@@ -300,7 +329,8 @@ module.exports = {
     ],
   },
   optimization: {
-    splitChunks: false,
+    // Keep the bootstrap self-contained; Flight manifests list every async dependency.
+    splitChunks: { chunks: "async" },
     runtimeChunk: false,
     moduleIds: "named",
     chunkIds: "named",
@@ -322,5 +352,6 @@ module.exports = {
       ],
     }),
     new ClientManifestExportAliasesPlugin(),
+    ...(mode === "production" ? [new PrecompressedClientAssetsPlugin()] : []),
   ],
 };
