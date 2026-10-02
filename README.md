@@ -556,3 +556,19 @@ no server dependencies are included. `Link` and `Redirect` inherit it
 implicitly. Server requests use an async-local context, and HTML rendering and
 client navigation receive the same basename through the Flight head and HTML
 shell. External URLs and already-prefixed URLs are preserved.
+
+## Response compression
+
+Production HTML responses use asynchronous Brotli/Gzip compression. HTML, status,
+cookies and cache headers retain their existing behavior, and rejected encodings
+(`q=0`) are respected. Development responses remain uncompressed.
+
+Production assets automatically use adjacent `.br` or `.gz` files when the negotiated
+encoding matches and the compressed file is at least as recent as the original.
+Generate these files after building the original assets. Missing or older sidecars
+fall back to streaming compression; no configuration change is required. Asset
+metadata reads are asynchronous. Existing immutable caching for versioned assets
+and `Vary: Accept-Encoding` remain in place.
+
+These changes do not cache authenticated HTML or RSC responses. Worker count,
+initial rendering and application caching retain their existing behavior.

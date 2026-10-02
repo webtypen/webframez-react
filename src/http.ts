@@ -8,11 +8,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn, type ChildProcess } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
-  brotliCompressSync,
+  brotliCompress,
   createBrotliCompress,
   createGzip,
-  gzipSync,
+  gzip,
 } from "node:zlib";
+import { promisify } from "node:util";
 import { createHTMLShell, renderRSCToString, sendRSC } from "./server";
 import { createFileRouter, parseSearchParams, renderHeadToString } from "./router";
 import type {
@@ -21,6 +22,9 @@ import type {
   RouteDataHook,
   RouteRequestContext,
 } from "./types";
+
+const compressBrotli = promisify(brotliCompress);
+const compressGzip = promisify(gzip);
 
 export type WebframezReactRoutePath = `/${string}` | "/";
 export type WebframezReactAssetsPrefix = `${WebframezReactRoutePath}/` | "/";
@@ -175,19 +179,23 @@ function getPreferredContentEncoding(req: IncomingMessage, ext: string, fileSize
     return "";
   }
 
-  const acceptEncoding = String(req.headers["accept-encoding"] || "");
-  if (/\bbr\b/.test(acceptEncoding)) {
-    return "br";
+  const qualities = new Map<string, number>();
+  for (const entry of String(req.headers["accept-encoding"] || "").toLowerCase().split(",")) {
+    const [name, ...parameters] = entry.trim().split(";");
+    if (!name) continue;
+    const qualityParameter = parameters.find(parameter => /^\s*q\s*=/.test(parameter));
+    const quality = qualityParameter === undefined ? 1 : Number(qualityParameter.split("=")[1].trim());
+    qualities.set(name, Number.isFinite(quality) && quality >= 0 && quality <= 1 ? quality : 0);
   }
 
-  if (/\bgzip\b/.test(acceptEncoding)) {
-    return "gzip";
-  }
-
+  const brotliQuality = qualities.get("br") ?? qualities.get("*") ?? 0;
+  const gzipQuality = qualities.get("gzip") ?? qualities.get("*") ?? 0;
+  if (brotliQuality > 0 && brotliQuality >= gzipQuality) return "br";
+  if (gzipQuality > 0) return "gzip";
   return "";
 }
 
-function sendTextResponse(
+async function sendTextResponse(
   req: IncomingMessage,
   res: ServerResponse,
   body: string,
@@ -203,6 +211,13 @@ function sendTextResponse(
     ? ""
     : getPreferredContentEncoding(req, ".html", bodyBuffer.length);
 
+  const output = contentEncoding === "br"
+    ? await compressBrotli(bodyBuffer)
+    : contentEncoding === "gzip"
+      ? await compressGzip(bodyBuffer)
+      : bodyBuffer;
+  if (res.destroyed) return;
+
   res.statusCode = options.statusCode ?? 200;
   res.setHeader("Content-Type", options.contentType);
   if (options.cacheControl) {
@@ -210,19 +225,10 @@ function sendTextResponse(
   }
   res.setHeader("Vary", "Accept-Encoding");
 
-  if (contentEncoding === "br") {
-    res.setHeader("Content-Encoding", "br");
-    res.end(brotliCompressSync(bodyBuffer));
-    return;
+  if (contentEncoding) {
+    res.setHeader("Content-Encoding", contentEncoding);
   }
-
-  if (contentEncoding === "gzip") {
-    res.setHeader("Content-Encoding", "gzip");
-    res.end(gzipSync(bodyBuffer));
-    return;
-  }
-
-  res.end(bodyBuffer);
+  res.end(output);
 }
 
 type InitialHtmlFlightPayload = {
@@ -1270,7 +1276,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       const ext = path.extname(filePath);
       let stat: fs.Stats;
       try {
-        stat = fs.statSync(filePath);
+        stat = await fs.promises.stat(filePath);
         if (!stat.isFile()) {
           throw new Error("Asset path is not a file");
         }
@@ -1295,14 +1301,31 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       const contentEncoding = !isDevelopmentAsset
         ? getPreferredContentEncoding(req, ext, stat.size)
         : "";
-      const stream = fs.createReadStream(filePath);
+      let sourcePath = filePath;
+      if (contentEncoding) {
+        const compressedPath = `${filePath}.${contentEncoding === "br" ? "br" : "gz"}`;
+        try {
+          const compressedStat = await fs.promises.stat(compressedPath);
+          // Never serve an older build's compressed content for a changed asset.
+          if (compressedStat.isFile() && compressedStat.mtimeMs >= stat.mtimeMs) {
+            sourcePath = compressedPath;
+          }
+        } catch {
+          // Missing sidecars retain the existing streaming compression fallback.
+        }
+      }
+
+      const stream = fs.createReadStream(sourcePath);
       stream.on("error", () => {
         if (!res.headersSent) {
           res.statusCode = 404;
         }
         res.end("Not found");
       });
-      if (contentEncoding === "br") {
+      if (sourcePath !== filePath) {
+        res.setHeader("Content-Encoding", contentEncoding);
+        stream.pipe(res);
+      } else if (contentEncoding === "br") {
         res.setHeader("Content-Encoding", "br");
         stream.pipe(createBrotliCompress()).pipe(res);
       } else if (contentEncoding === "gzip") {
@@ -1378,7 +1401,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
           });
         } catch (flightRenderError) {
           console.error("[webframez-react] Flight-to-HTML render failed", flightRenderError);
-          sendTextResponse(
+          await sendTextResponse(
             req,
             res,
             createInitialHtmlErrorMarkup("Failed to render initial React HTML."),
@@ -1393,7 +1416,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       }
     }
 
-    sendTextResponse(
+    await sendTextResponse(
       req,
       res,
       createHTMLShell({

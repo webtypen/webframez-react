@@ -15,11 +15,12 @@ import path3 from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import {
-  brotliCompressSync,
+  brotliCompress,
   createBrotliCompress,
   createGzip,
-  gzipSync
+  gzip
 } from "node:zlib";
+import { promisify } from "node:util";
 
 // src/server.ts
 import path from "node:path";
@@ -848,6 +849,8 @@ function parseSearchParams(query) {
 }
 
 // src/http.ts
+var compressBrotli = promisify(brotliCompress);
+var compressGzip = promisify(gzip);
 function attachResolvedContextToCoreRequest(req, context) {
   if (!context) {
     return;
@@ -931,35 +934,39 @@ function getPreferredContentEncoding(req, ext, fileSize) {
   if (!isCompressibleAsset(ext) || fileSize < 1024) {
     return "";
   }
-  const acceptEncoding = String(req.headers["accept-encoding"] || "");
-  if (/\bbr\b/.test(acceptEncoding)) {
+  const qualities = /* @__PURE__ */ new Map();
+  for (const entry of String(req.headers["accept-encoding"] || "").toLowerCase().split(",")) {
+    const [name, ...parameters] = entry.trim().split(";");
+    if (!name)
+      continue;
+    const qualityParameter = parameters.find((parameter) => /^\s*q\s*=/.test(parameter));
+    const quality = qualityParameter === void 0 ? 1 : Number(qualityParameter.split("=")[1].trim());
+    qualities.set(name, Number.isFinite(quality) && quality >= 0 && quality <= 1 ? quality : 0);
+  }
+  const brotliQuality = qualities.get("br") ?? qualities.get("*") ?? 0;
+  const gzipQuality = qualities.get("gzip") ?? qualities.get("*") ?? 0;
+  if (brotliQuality > 0 && brotliQuality >= gzipQuality)
     return "br";
-  }
-  if (/\bgzip\b/.test(acceptEncoding)) {
+  if (gzipQuality > 0)
     return "gzip";
-  }
   return "";
 }
-function sendTextResponse(req, res, body, options) {
+async function sendTextResponse(req, res, body, options) {
   const bodyBuffer = Buffer.from(body);
   const contentEncoding = options.compress === false ? "" : getPreferredContentEncoding(req, ".html", bodyBuffer.length);
+  const output = contentEncoding === "br" ? await compressBrotli(bodyBuffer) : contentEncoding === "gzip" ? await compressGzip(bodyBuffer) : bodyBuffer;
+  if (res.destroyed)
+    return;
   res.statusCode = options.statusCode ?? 200;
   res.setHeader("Content-Type", options.contentType);
   if (options.cacheControl) {
     res.setHeader("Cache-Control", options.cacheControl);
   }
   res.setHeader("Vary", "Accept-Encoding");
-  if (contentEncoding === "br") {
-    res.setHeader("Content-Encoding", "br");
-    res.end(brotliCompressSync(bodyBuffer));
-    return;
+  if (contentEncoding) {
+    res.setHeader("Content-Encoding", contentEncoding);
   }
-  if (contentEncoding === "gzip") {
-    res.setHeader("Content-Encoding", "gzip");
-    res.end(gzipSync(bodyBuffer));
-    return;
-  }
-  res.end(bodyBuffer);
+  res.end(output);
 }
 var INITIAL_HTML_WORKER_SCRIPT = `
 const fs = require("node:fs");
@@ -1795,7 +1802,7 @@ function createNodeRequestHandler(options) {
       const ext = path3.extname(filePath);
       let stat;
       try {
-        stat = fs2.statSync(filePath);
+        stat = await fs2.promises.stat(filePath);
         if (!stat.isFile()) {
           throw new Error("Asset path is not a file");
         }
@@ -1814,14 +1821,28 @@ function createNodeRequestHandler(options) {
       );
       res.setHeader("Vary", "Accept-Encoding");
       const contentEncoding = !isDevelopmentAsset ? getPreferredContentEncoding(req, ext, stat.size) : "";
-      const stream = fs2.createReadStream(filePath);
+      let sourcePath = filePath;
+      if (contentEncoding) {
+        const compressedPath = `${filePath}.${contentEncoding === "br" ? "br" : "gz"}`;
+        try {
+          const compressedStat = await fs2.promises.stat(compressedPath);
+          if (compressedStat.isFile() && compressedStat.mtimeMs >= stat.mtimeMs) {
+            sourcePath = compressedPath;
+          }
+        } catch {
+        }
+      }
+      const stream = fs2.createReadStream(sourcePath);
       stream.on("error", () => {
         if (!res.headersSent) {
           res.statusCode = 404;
         }
         res.end("Not found");
       });
-      if (contentEncoding === "br") {
+      if (sourcePath !== filePath) {
+        res.setHeader("Content-Encoding", contentEncoding);
+        stream.pipe(res);
+      } else if (contentEncoding === "br") {
         res.setHeader("Content-Encoding", "br");
         stream.pipe(createBrotliCompress()).pipe(res);
       } else if (contentEncoding === "gzip") {
@@ -1890,7 +1911,7 @@ function createNodeRequestHandler(options) {
           });
         } catch (flightRenderError) {
           console.error("[webframez-react] Flight-to-HTML render failed", flightRenderError);
-          sendTextResponse(
+          await sendTextResponse(
             req,
             res,
             createInitialHtmlErrorMarkup("Failed to render initial React HTML."),
@@ -1904,7 +1925,7 @@ function createNodeRequestHandler(options) {
         }
       }
     }
-    sendTextResponse(
+    await sendTextResponse(
       req,
       res,
       createHTMLShell({
