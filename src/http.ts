@@ -1171,13 +1171,16 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
     cwd: process.cwd(),
   });
   const initialHtmlWorker = createInitialHtmlWorker(pagesDir);
-  const disposeInitialHtmlWorker = () => {
+  const disposeRequestResources = () => {
+    // End development streams so the host's server.close() can finish.
+    for (const response of liveReloadClients) response.end();
+    liveReloadClients.clear();
     initialHtmlWorker.dispose();
   };
 
-  process.once("exit", disposeInitialHtmlWorker);
-  process.once("SIGINT", disposeInitialHtmlWorker);
-  process.once("SIGTERM", disposeInitialHtmlWorker);
+  process.once("exit", disposeRequestResources);
+  process.on("SIGINT", disposeRequestResources);
+  process.on("SIGTERM", disposeRequestResources);
 
   const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
     if (!req.url) {

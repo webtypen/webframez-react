@@ -4,6 +4,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { constants } from "node:os";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -16,6 +17,45 @@ const command = process.argv[2];
 const passthroughStart = process.argv[3] === "--" ? 4 : 3;
 const passthroughArgs = process.argv.slice(passthroughStart);
 const customArgPrefixes = ["--client-entry", "--server-entry", "--routes", "--out-dir", "--runtime-out-dir"];
+
+const activeChildren = new Map();
+let stopping = false;
+let shutdownPromise;
+
+function spawnChild(binary, args, options) {
+  if (stopping) throw new Error("CLI is stopping.");
+  const child = spawn(binary, args, options);
+  const closed = new Promise(resolve => child.once("close", resolve));
+  activeChildren.set(child, closed);
+  child.once("close", () => activeChildren.delete(child));
+  return child;
+}
+
+function childExitCode(code, signal) {
+  if (stopping) return 0;
+  return code ?? (signal ? 128 + (constants.signals[signal] || 1) : 1);
+}
+
+function stopChildren() {
+  if (shutdownPromise) return shutdownPromise;
+  stopping = true;
+  const children = [...activeChildren.entries()];
+  for (const [child] of children) child.kill("SIGTERM");
+  const timer = setTimeout(() => {
+    for (const [child] of children) {
+      if (activeChildren.has(child)) child.kill("SIGKILL");
+    }
+  }, 5000);
+  shutdownPromise = Promise.all(children.map(([, closed]) => closed)).finally(() => clearTimeout(timer));
+  return shutdownPromise;
+}
+
+function shutdown() {
+  void stopChildren().then(() => process.exit(0));
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 function printHelp() {
   console.log(
@@ -159,7 +199,7 @@ async function reexecWithReactServerConditionIfNeeded() {
     return false;
   }
 
-  const child = spawn(process.execPath, [
+  const child = spawnChild(process.execPath, [
     "--conditions",
     "react-server",
     "--require",
@@ -178,7 +218,7 @@ async function reexecWithReactServerConditionIfNeeded() {
 
   const code = await new Promise((resolve, reject) => {
     child.on("error", reject);
-    child.on("close", (exitCode) => resolve(exitCode || 0));
+    child.on("close", (exitCode, signal) => resolve(childExitCode(exitCode, signal)));
   });
 
   process.exit(code);
@@ -260,7 +300,7 @@ function run(binaryName, args, envAdditions = {}) {
   const binary = resolveBinary(binaryName);
 
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, {
+    const child = spawnChild(binary, args, {
       cwd: projectRoot,
       stdio: "inherit",
       shell: false,
@@ -274,8 +314,8 @@ function run(binaryName, args, envAdditions = {}) {
       reject(error);
     });
 
-    child.on("close", (code) => {
-      resolve(code || 0);
+    child.on("close", (code, signal) => {
+      resolve(childExitCode(code, signal));
     });
   });
 }
@@ -283,7 +323,7 @@ function run(binaryName, args, envAdditions = {}) {
 function start(binaryName, args, envAdditions = {}) {
   const binary = resolveBinary(binaryName);
 
-  return spawn(binary, args, {
+  return spawnChild(binary, args, {
     cwd: projectRoot,
     stdio: "inherit",
     shell: false,
@@ -519,9 +559,9 @@ async function watchRouteTargets(targets, passthroughArgsClean) {
   await new Promise((resolve, reject) => {
     for (const child of children) {
       child.on("error", reject);
-      child.on("close", (code) => {
-        if (code && code !== 0) {
-          reject(new Error(`[webframez-react] watch child exited with code ${code}.`));
+      child.on("close", (code, signal) => {
+        if (!stopping) {
+          reject(new Error(`[webframez-react] watch child exited unexpectedly (${signal || code}).`));
           return;
         }
 
@@ -783,12 +823,14 @@ async function main() {
   process.exit(1);
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
+  if (stopping) return;
   console.error("[webframez-react] Build command failed.");
   if (error && typeof error === "object" && "message" in error) {
     console.error(String(error.message));
   } else {
     console.error(error);
   }
+  await stopChildren();
   process.exit(1);
 });
