@@ -29,9 +29,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// ../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/dist/routing.js
+// ../../../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/dist/routing.js
 var require_routing = __commonJS({
-  "../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/dist/routing.js"(exports2) {
+  "../../../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/dist/routing.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.appRelativePath = exports2.appPath = exports2.getBasename = exports2.normalizeBasename = void 0;
@@ -76,9 +76,9 @@ var require_routing = __commonJS({
   }
 });
 
-// ../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/routing.js
+// ../../../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/routing.js
 var require_routing2 = __commonJS({
-  "../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/routing.js"(exports2, module2) {
+  "../../../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/routing.js"(exports2, module2) {
     module2.exports = require_routing();
   }
 });
@@ -1199,18 +1199,17 @@ function normalizeWebframezRequireCandidate(candidate) {
     }
   }
 
-  const frameworkDistDir = path.join("node_modules", "@webtypen", "webframez-react", "dist");
-  const shouldUseCjs =
-    candidate.includes(frameworkDistDir) &&
-    (candidate.endsWith(path.join("dist", "navigation.js")) ||
-      candidate.endsWith(path.join("dist", "route-slot.js")));
-
-  if (!shouldUseCjs) {
-    return candidate;
+  // Resolve framework references against this deployment, including manifests
+  // produced in a different pnpm workspace or on a different operating system.
+  const portableCandidate = candidate.split(String.fromCharCode(92)).join("/");
+  const frameworkDistDir = "node_modules/@webtypen/webframez-react/dist/";
+  for (const moduleName of ["navigation", "route-slot"]) {
+    if (portableCandidate.endsWith(frameworkDistDir + moduleName + ".js") ||
+        portableCandidate.endsWith(frameworkDistDir + moduleName + ".cjs")) {
+      return require.resolve("@webtypen/webframez-react/" + moduleName, { paths: [process.cwd()] });
+    }
   }
-
-  const cjsCandidate = candidate.slice(0, -3) + ".cjs";
-  return fs.existsSync(cjsCandidate) ? cjsCandidate : candidate;
+  return candidate;
 }
 
 globalThis.__webpack_require__ = function __webframezNodeRequire(id) {

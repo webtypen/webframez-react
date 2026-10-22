@@ -30,9 +30,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// ../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/dist/routing.js
+// ../../../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/dist/routing.js
 var require_routing = __commonJS({
-  "../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/dist/routing.js"(exports2) {
+  "../../../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/dist/routing.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.appRelativePath = exports2.appPath = exports2.getBasename = exports2.normalizeBasename = void 0;
@@ -77,9 +77,9 @@ var require_routing = __commonJS({
   }
 });
 
-// ../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/routing.js
+// ../../../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/routing.js
 var require_routing2 = __commonJS({
-  "../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/routing.js"(exports2, module2) {
+  "../../../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/routing.js"(exports2, module2) {
     module2.exports = require_routing();
   }
 });

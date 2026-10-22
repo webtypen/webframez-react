@@ -77,3 +77,24 @@ test('initial HTML uses the same model slot as the client loader fragment for st
  assert.equal(await renderInitial('',{}), expected);
  assert.notEqual(expected, renderToString(model));
 });
+
+
+test('relocated framework modules resolve through deployment exports on Windows and POSIX', () => {
+  const start = source.indexOf('function normalizeWebframezRequireCandidate(');
+  const end = source.indexOf('\nglobalThis.__webpack_require__', start);
+  const resolveCalls = [];
+  const normalizeRequire = vm.runInNewContext(source.slice(start, end) + '\nnormalizeWebframezRequireCandidate', {
+    path, fs: { existsSync: () => false }, process: { cwd: () => '/srv/deployed' },
+    require: { resolve: (name, options) => { resolveCalls.push([name, options.paths[0]]); return '/srv/resolved/' + name; } },
+  });
+  for (const module of ['navigation', 'route-slot']) {
+    for (const extension of ['js', 'cjs']) {
+      for (const separator of ['/', String.fromCharCode(92)]) {
+        const id = ['/old', 'node_modules', '.pnpm', 'package', 'node_modules', '@webtypen', 'webframez-react', 'dist', module + '.' + extension].join(separator);
+        assert.equal(normalizeRequire(id), '/srv/resolved/@webtypen/webframez-react/' + module);
+      }
+    }
+  }
+  assert.ok(resolveCalls.every(call => call[1] === '/srv/deployed'));
+  assert.equal(normalizeRequire('/other/package/navigation.js'), '/other/package/navigation.js');
+});
