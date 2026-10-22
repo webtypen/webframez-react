@@ -31,9 +31,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/@webtypen/webframez-core/dist/routing.js
+// ../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/dist/routing.js
 var require_routing = __commonJS({
-  "node_modules/@webtypen/webframez-core/dist/routing.js"(exports) {
+  "../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/dist/routing.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.appRelativePath = exports.appPath = exports.getBasename = exports.normalizeBasename = void 0;
@@ -78,9 +78,9 @@ var require_routing = __commonJS({
   }
 });
 
-// node_modules/@webtypen/webframez-core/routing.js
+// ../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/routing.js
 var require_routing2 = __commonJS({
-  "node_modules/@webtypen/webframez-core/routing.js"(exports, module) {
+  "../../webdev/webframez/webframez-react/node_modules/@webtypen/webframez-core/routing.js"(exports, module) {
     module.exports = require_routing();
   }
 });
@@ -1131,6 +1131,7 @@ const reactDomPkg = require.resolve("react-dom/package.json", {
   paths: [process.cwd()]
 });
 const reactDomServer = require(path.join(path.dirname(reactDomPkg), "server.node.js"));
+const React = require("react");
 globalThis.__webpack_chunk_load__ = function __webframezNoopChunkLoad() {
   return Promise.resolve();
 };
@@ -1138,9 +1139,9 @@ function normalizeWebframezRequireCandidate(candidate) {
   const stagingMarker = path.join(".webframez-build", "");
   const runtimeMarkers = [path.join("app", ""), path.join("modules", "")];
   const stagingIndex = candidate.indexOf(stagingMarker);
-  if (stagingIndex >= 0) {
+  if (stagingIndex >= 0 || candidate.startsWith("./build/")) {
     for (const runtimeMarker of runtimeMarkers) {
-      const markerIndex = candidate.indexOf(runtimeMarker, stagingIndex);
+      const markerIndex = candidate.indexOf(runtimeMarker, Math.max(0, stagingIndex));
       if (markerIndex < 0) {
         continue;
       }
@@ -1309,7 +1310,9 @@ async function renderHtmlFromFlightData(flightData, moduleMap) {
     const previousBasename = globalThis.__RSC_BASENAME;
     globalThis.__RSC_BASENAME = basename;
     try {
-      return await renderHtml(model);
+      // Match the client fragment: the loader occupies slot 1 even before mounting.
+      // Keeping the model in slot 2 preserves React useId across SSR and hydration.
+      return await renderHtml(React.createElement(React.Fragment, null, null, model));
     } finally {
       globalThis.__RSC_BASENAME = previousBasename;
     }
@@ -1622,15 +1625,24 @@ function normalizeClientManifest(manifest, options) {
     const moduleKey = hashIndex < 0 ? key : key.slice(0, hashIndex);
     const exportSuffix = hashIndex < 0 ? "" : key.slice(hashIndex);
     if (!path3.isAbsolute(moduleKey) && !moduleKey.includes(":") && !moduleKey.startsWith("file://")) {
-      const runtimePath = path3.resolve(options.cwd, moduleKey);
-      const allowedRoots = [options.distRootDir, ...candidateNodeModulesDirs];
-      const insideArtifact = allowedRoots.some((root) => {
-        const relative = path3.relative(path3.resolve(root), runtimePath);
-        return relative !== "" && relative !== ".." && !relative.startsWith(`..${path3.sep}`) && !path3.isAbsolute(relative);
-      });
-      if (insideArtifact) {
-        addAlias(`${runtimePath}${exportSuffix}`, value);
-        addAlias(`${pathToFileURL(runtimePath).href}${exportSuffix}`, value);
+      const runtimePaths = [path3.resolve(options.cwd, moduleKey)];
+      if (options.pagesDir) {
+        const pageMarker = path3.relative(options.cwd, options.pagesDir).split(path3.sep).join("/") + "/";
+        const pageIndex = moduleKey.indexOf(pageMarker);
+        if (pageIndex >= 0 && !pageMarker.startsWith("../")) {
+          runtimePaths.push(path3.resolve(options.pagesDir, moduleKey.slice(pageIndex + pageMarker.length)));
+        }
+      }
+      const allowedRoots = [options.distRootDir, ...options.pagesDir ? [options.pagesDir] : [], ...candidateNodeModulesDirs];
+      for (const runtimePath of runtimePaths) {
+        const insideArtifact = allowedRoots.some((root) => {
+          const relative = path3.relative(path3.resolve(root), runtimePath);
+          return relative !== "" && relative !== ".." && !relative.startsWith(`..${path3.sep}`) && !path3.isAbsolute(relative);
+        });
+        if (insideArtifact) {
+          addAlias(`${runtimePath}${exportSuffix}`, value);
+          addAlias(`${pathToFileURL(runtimePath).href}${exportSuffix}`, value);
+        }
       }
     }
     if (!key.startsWith("file://")) {
@@ -1781,6 +1793,7 @@ function createManifestLoader(options) {
       JSON.parse(fs2.readFileSync(options.manifestPath, "utf-8")),
       {
         distRootDir: options.distRootDir,
+        pagesDir: options.pagesDir,
         cwd: options.cwd
       }
     );
@@ -1812,6 +1825,7 @@ function createNodeRequestHandler(options) {
   const router = createFileRouter({ pagesDir, onData: options.onData, onError: options.onError });
   const getManifestState = createManifestLoader({
     distRootDir,
+    pagesDir,
     manifestPath,
     cwd: process.cwd()
   });

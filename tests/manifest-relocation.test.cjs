@@ -48,3 +48,32 @@ test('existing runtime aliases take precedence', () => {
   const result = normalize({'./dist/app.js':{id:'old'}, 'file:///srv/website/build0/dist/app.js':live}, options);
   assert.equal(result['file:///srv/website/build0/dist/app.js'], live);
 });
+
+test('copied build resolves client pages outside the public asset directory', () => {
+  const entry = {id:'./build/app/Public/react/Form.js', name:'Form'};
+  const options = {cwd:'/srv/api/build', distRootDir:'/srv/api/build/webframez-react/onboarding', pagesDir:'/srv/api/build/app/Public/react'};
+  const result = normalize({'./build/app/Public/react/Form.js#Form':entry}, options);
+  assert.equal(result['file:///srv/api/build/app/Public/react/Form.js#Form'], entry);
+});
+
+test('page aliases cannot escape the configured page root', () => {
+  const manifest = {'./build/app/Public/react/../../../../secret.js#value':{id:'secret'}};
+  const options = {cwd:'/srv/api/build', distRootDir:'/srv/api/build/webframez-react/onboarding', pagesDir:'/srv/api/build/app/Public/react'};
+  assert.deepEqual(Object.keys(normalize(manifest, options)), Object.keys(manifest));
+});
+
+test('initial HTML uses the same model slot as the client loader fragment for stable React IDs', async () => {
+ const React = require('react');
+ const { renderToString } = require('react-dom/server');
+ const source = readFileSync(path.join(__dirname, '../src/http.ts'), 'utf8');
+ const start = source.indexOf('async function renderHtmlFromFlightData(');
+ const end = source.indexOf('\nprocess.on("message"', start + 1);
+ function Field() { const id = React.useId(); return React.createElement('label',{htmlFor:id},React.createElement('input',{id})); }
+ const model = React.createElement(Field);
+ const renderInitial = vm.runInNewContext(source.slice(start,end)+'\nrenderHtmlFromFlightData', {
+  React, require, globalThis:{}, decodeFlightPayloadFromString:async()=>({model}), renderHtml:async(tree)=>renderToString(tree),
+ });
+ const expected = renderToString(React.createElement(React.Fragment,null,null,model));
+ assert.equal(await renderInitial('',{}), expected);
+ assert.notEqual(expected, renderToString(model));
+});
