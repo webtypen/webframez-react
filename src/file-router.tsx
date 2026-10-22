@@ -1,3 +1,4 @@
+import { reportRouteError, type RouteErrorHook } from "./report-error";
 import fs from "node:fs";
 import Module from "node:module";
 import path from "node:path";
@@ -497,7 +498,7 @@ function isRouteAbort(value: unknown): value is RouteAbort {
   }
 }
 
-export function createFileRouter(options: { pagesDir: string; onData?: RouteDataHook }) {
+export function createFileRouter(options: { pagesDir: string; onData?: RouteDataHook; onError?: RouteErrorHook }) {
   installForcedPackageResolution();
 
   const pagesDir = options.pagesDir;
@@ -763,13 +764,14 @@ export function createFileRouter(options: { pagesDir: string; onData?: RouteData
       if (isRouteAbort(error)) {
         return renderError(activeContext, error.statusCode, error.message, error.payload);
       }
-      console.error("[webframez-react] Failed to resolve route", error);
-      return renderError(contextBase, 500, "Internal server error");
+      await reportRouteError(error, activeContext, options.onError);
+      return renderError(activeContext, 500, "Internal server error");
     }
   }
 
   return {
     resolve,
+    resolveError: renderError,
     readSearchParams,
   };
 }

@@ -16,13 +16,14 @@ export type ResolvedRoute = {
   pageModel?: ReactNode;
 };
 
-export function createFileRouter(options: { pagesDir: string; onData?: RouteDataHook }): {
+export function createFileRouter(options: { pagesDir: string; onData?: RouteDataHook; onError?: (error: unknown, context: RouteContext) => boolean | void | Promise<boolean | void> }): {
   resolve(input: {
     pathname: string;
     searchParams: RouteSearchParams;
     cookies?: Record<string, string>;
     request?: RouteRequestContext;
   }): Promise<ResolvedRoute>;
+  resolveError(context: RouteContext, statusCode: number, message: string, payload?: unknown): Promise<ResolvedRoute>;
   readSearchParams(urlSearchParams: URLSearchParams): RouteSearchParams;
 };
 

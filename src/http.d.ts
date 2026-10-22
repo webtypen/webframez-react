@@ -23,6 +23,8 @@ export interface CreateNodeHandlerOptions
   extends CreateNodeHandlerPathsOptions,
     CreateNodeHandlerRoutingOptions {
   onData?: RouteDataHook;
+  /** Return true when the host has recorded this error separately. */
+  onError?: (error: unknown, context: import("./types").RouteContext) => boolean | void | Promise<boolean | void>;
   auth?: string | AuthScope | (() => AuthScope);
 }
 

@@ -1,3 +1,4 @@
+import { reportRouteError, type RouteErrorHook } from "./report-error";
 import type { AuthScope, Request } from "@webtypen/webframez-core";
 import React from "react";
 import { AuthProvider } from "@webtypen/webframez-react/auth";
@@ -48,6 +49,7 @@ export interface CreateNodeHandlerOptions
   extends CreateNodeHandlerPathsOptions,
     CreateNodeHandlerRoutingOptions {
   onData?: RouteDataHook;
+  onError?: RouteErrorHook;
   auth?: string | AuthScope | (() => AuthScope);
 }
 
@@ -1164,7 +1166,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       : options.liveReloadPath ?? `${basePath || ""}/__webframez_live_reload`;
   const liveReloadClients = new Set<ServerResponse>();
 
-  const router = createFileRouter({ pagesDir, onData: options.onData });
+  const router = createFileRouter({ pagesDir, onData: options.onData, onError: options.onError });
   const getManifestState = createManifestLoader({
     distRootDir,
     manifestPath,
@@ -1241,7 +1243,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         res,
       );
       const search = new URLSearchParams(url.searchParams.get("search") || "");
-      const resolved = await withRequestBasename(basePath, () =>
+      let resolved = await withRequestBasename(basePath, () =>
         router.resolve({
           pathname,
           searchParams: parseSearchParams(search),
@@ -1264,6 +1266,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       sendRSC(res, payload, {
         moduleMap: manifestState.moduleMap,
         statusCode: resolved.statusCode,
+        onError: error => { void reportRouteError(error, resolved.context, options.onError); },
       });
       return;
     }
@@ -1342,7 +1345,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
     }
 
     const routeRequest = await createRouteRequestContext(req, stripBasePath(url.pathname, basePath), url.pathname, options.auth, res);
-    const resolved = await withRequestBasename(basePath, () =>
+    let resolved = await withRequestBasename(basePath, () =>
       router.resolve({
         pathname: stripBasePath(url.pathname, basePath),
         searchParams: parseSearchParams(url.searchParams),
@@ -1360,9 +1363,19 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
       head: resolved.head,
     };
     const manifestState = getManifestState();
-    const initialFlightData = await renderRSCToString(initialPayload, {
+    const renderErrors: Promise<void>[] = [];
+    let initialFlightData = await renderRSCToString(initialPayload, {
       moduleMap: manifestState.moduleMap,
+      onError: error => { renderErrors.push(reportRouteError(error, resolved.context, options.onError)); },
     });
+    await Promise.all(renderErrors);
+    if (renderErrors.length) {
+      resolved = await router.resolveError(resolved.context, 500, "Internal server error");
+      initialFlightData = await renderRSCToString({ model: resolved.model, head: resolved.head }, {
+        moduleMap: manifestState.moduleMap,
+        onError: error => { void reportRouteError(error, resolved.context, options.onError); },
+      });
+    }
     const transportBasePath =
       normalizeRuntimeBasePath(resolved.head.transportBasePath) ??
       normalizeRuntimeBasePath(basePath) ??
@@ -1388,7 +1401,7 @@ export function createNodeRequestHandler(options: CreateNodeHandlerOptions) {
         moduleMap: manifestState.serverConsumerModuleMap,
       });
     } catch (error) {
-      console.error("[webframez-react] Failed to render initial HTML", error);
+      if (!renderErrors.length) await reportRouteError(error, resolved.context, options.onError);
       try {
         initialHtmlWorker.dispose();
         rootHtml = await initialHtmlWorker.renderFromFlightData({

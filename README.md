@@ -590,3 +590,9 @@ consumer build also provides sidecars. Development builds do not emit sidecars.
 
 `tests/shared-chunks.test.cjs` builds real Flight references, loads their emitted
 chunks and checks shared module state, deduplicated downloads and decompression.
+
+## Fehlerkanal und eigene Fehlerablagen
+
+Ab 0.0.59 melden Router-, Data- und React-Rendergrenzen unerwartete Exceptions über `ErrorHandler.report` an einen vorhandenen Core. Ohne Core bleibt das Konsolenlogging erhalten. Erwartete `abort(...)`-Antworten werden nicht als Exceptions gemeldet. Der aktive Seitenkontext bleibt für die Fehlerseite erhalten.
+
+`onError(error, context)` ist für `createFileRouter`, `createNodeRequestHandler` und `Route.renderReact` verfügbar. Der Hook darf asynchron sein. Nur `true` bedeutet: Die Anwendung hat den Fehler separat übernommen und verhindert damit die zentrale Meldung. Ohne `true` erfolgt normales Reporting. Ein fehlerhafter Hook unterdrückt die ursprüngliche Exception nicht. Website-Integrationen können hier `WebsiteCodeErrors.handle(error, context)` einsetzen. Vertrauliche Fehlertexte gehören nicht in öffentliche Fehlerseiten.

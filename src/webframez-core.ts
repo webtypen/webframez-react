@@ -385,6 +385,7 @@ export function resolveWebframezReactRouteOptions(
       : defaults.styleSrcPath,
     liveReloadPath: typeof options.liveReloadPath === "string" ? appPath(options.liveReloadPath) : options.liveReloadPath,
     onData: options.onData,
+    onError: options.onError,
   };
 }
 

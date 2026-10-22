@@ -36,6 +36,34 @@ __export(router_exports, {
 });
 module.exports = __toCommonJS(router_exports);
 
+// src/report-error.ts
+var reported = /* @__PURE__ */ new WeakMap();
+async function reportRouteError(error, context, hook) {
+  const request = context.request || context;
+  let seen = reported.get(request);
+  if (!seen)
+    reported.set(request, seen = /* @__PURE__ */ new Set());
+  if (seen.has(error))
+    return;
+  seen.add(error);
+  try {
+    if (await hook?.(error, context) === true)
+      return;
+  } catch (hookError) {
+    console.error("[webframez-react] Error hook failed", hookError);
+  }
+  try {
+    const { ErrorHandler } = await import("@webtypen/webframez-core");
+    if (ErrorHandler?.report) {
+      await ErrorHandler.report(error, { scope: "controller", source: "webframez-react.render", controller: { routePath: context.pathname.split(/[?#]/)[0] } });
+      return;
+    }
+  } catch (reportError) {
+    console.error("[webframez-react] Could not report render error", reportError);
+  }
+  console.error("[webframez-react] Render failed", error);
+}
+
 // src/file-router.tsx
 var import_node_fs = __toESM(require("node:fs"), 1);
 var import_node_module = __toESM(require("node:module"), 1);
@@ -731,12 +759,13 @@ function createFileRouter(options) {
       if (isRouteAbort(error)) {
         return renderError(activeContext, error.statusCode, error.message, error.payload);
       }
-      console.error("[webframez-react] Failed to resolve route", error);
-      return renderError(contextBase, 500, "Internal server error");
+      await reportRouteError(error, activeContext, options.onError);
+      return renderError(activeContext, 500, "Internal server error");
     }
   }
   return {
     resolve,
+    resolveError: renderError,
     readSearchParams
   };
 }
