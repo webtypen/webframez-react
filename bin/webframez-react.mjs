@@ -718,6 +718,24 @@ async function main() {
     console.log(`[webframez-react] tsc config (${config.source}): ${config.path}`);
     console.log(`[webframez-react] server entry: ${serverEntryPath}`);
 
+    // Persistent CI builds share Core's atomic compiler cache. Keep tsc semantics
+    // for watch mode, explicit compiler flags and applications on older Core versions.
+    if (command === "build:server" && process.env.WEBFRAMEZ_BUILD_CACHE_DIRECTORY && passthroughArgsClean.length === 0) {
+      const projectRequire = createRequire(path.join(projectRoot, "package.json"));
+      let BuildApplication;
+      try { ({ BuildApplication } = projectRequire("@webtypen/webframez-core")); } catch { /* Optional peer. */ }
+      if (typeof BuildApplication?.prototype?.compile === "function") {
+        const ts = projectRequire("typescript");
+        const loaded = ts.readConfigFile(generatedConfigPath, ts.sys.readFile);
+        const parsed = ts.parseJsonConfigFileContent(loaded.config || {}, ts.sys, projectRoot, undefined, generatedConfigPath);
+        if (parsed.options.outDir && !parsed.options.noEmit) {
+          await new BuildApplication(projectRoot, {build: {tsconfig: generatedConfigPath, cacheDirectory: process.env.WEBFRAMEZ_BUILD_CACHE_DIRECTORY}}, {outDir: parsed.options.outDir}).compile();
+          process.exit(0);
+          return;
+        }
+      }
+    }
+
     const args = ["-p", generatedConfigPath, ...passthroughArgsClean];
     if (command === "watch:server") {
       if (!hasFlag("--watch")) {

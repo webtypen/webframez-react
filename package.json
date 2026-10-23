@@ -1,6 +1,6 @@
 {
   "name": "@webtypen/webframez-react",
-  "version": "0.0.62",
+  "version": "0.0.63",
   "description": "TypeScript React RSC addition for @webtypen/webframez-core",
   "homepage": "https://webtypen.de/",
   "author": {
@@ -119,7 +119,7 @@
     }
   },
   "devDependencies": {
-    "@webtypen/webframez-core": "0.3.76",
+    "@webtypen/webframez-core": "0.3.94",
     "esbuild": "^0.20.2",
     "react": "19.1.1",
     "react-dom": "19.1.1",

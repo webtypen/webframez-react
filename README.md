@@ -596,3 +596,12 @@ chunks and checks shared module state, deduplicated downloads and decompression.
 Ab 0.0.59 melden Router-, Data- und React-Rendergrenzen unerwartete Exceptions über `ErrorHandler.report` an einen vorhandenen Core. Ohne Core bleibt das Konsolenlogging erhalten. Erwartete `abort(...)`-Antworten werden nicht als Exceptions gemeldet. Der aktive Seitenkontext bleibt für die Fehlerseite erhalten.
 
 `onError(error, context)` ist für `createFileRouter`, `createNodeRequestHandler` und `Route.renderReact` verfügbar. Der Hook darf asynchron sein. Nur `true` bedeutet: Die Anwendung hat den Fehler separat übernommen und verhindert damit die zentrale Meldung. Ohne `true` erfolgt normales Reporting. Ein fehlerhafter Hook unterdrückt die ursprüngliche Exception nicht. Website-Integrationen können hier `WebsiteCodeErrors.handle(error, context)` einsetzen. Vertrauliche Fehlertexte gehören nicht in öffentliche Fehlerseiten.
+
+
+### Persistent server compilation
+
+With `WEBFRAMEZ_BUILD_CACHE_DIRECTORY` and Core 0.3.94 or newer, `build:server`
+uses Core's incremental, atomic compiler without booting application configuration.
+The original tsconfig output path is retained. Watch commands, explicit TypeScript
+flags and older Core versions retain the existing tsc path. WSM supplies the cache
+location automatically; Force Clear removes the incremental state.
