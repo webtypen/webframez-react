@@ -310,7 +310,12 @@ module.exports = {
     poll: Number(process.env.WEBFRAMEZ_REACT_WATCH_POLL || 1000),
     ignored: [
       path.resolve(projectRoot, "node_modules", "**"),
-      path.resolve(distDir, "**"),
+      // Compiled Client Components inside dist are inputs to the Flight build.
+      // Ignore only emitted assets so a tsc watch update triggers a rebuild.
+      path.resolve(distDir, "chunks", "**"),
+      path.resolve(distDir, "client.js*"),
+      path.resolve(distDir, "react-*-manifest.json"),
+      path.resolve(distDir, "styles.css*"),
       path.resolve(projectRoot, "build", "node_modules", "**"),
     ],
   },
