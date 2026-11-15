@@ -121,9 +121,9 @@
   "devDependencies": {
     "@webtypen/webframez-core": "0.3.94",
     "esbuild": "^0.20.2",
-    "react": "19.1.1",
-    "react-dom": "19.1.1",
-    "react-server-dom-webpack": "19.1.1"
+    "react": "19.1.10",
+    "react-dom": "19.1.10",
+    "react-server-dom-webpack": "19.1.10"
   },
   "typesVersions": {
     "*": {
